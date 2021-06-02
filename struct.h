@@ -1,4 +1,4 @@
-#define VERSION "v2.9.2"
+#define VERSION "v2.9.3"
 #define PACKETBUFF 1024
 
 #define HIGHOVL 16384
@@ -46,9 +46,16 @@ struct chanentry
 
 #define FLAGDRAIN 1
 
+#ifdef HAVE_SSL
+#define USE_SSL 1
+#endif
+
 struct lsock
 {
 	int fd;
+#ifdef HAVE_SSL
+	SSL *ssl;
+#endif
 	int flags;
 	struct sbuf sendq;
 	struct sbuf recvq;

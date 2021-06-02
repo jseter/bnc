@@ -17,6 +17,14 @@
 #include <netdb.h>
 #include <pwd.h>
 
+#ifdef HAVE_SSL
+#include <openssl/crypto.h>
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#endif
 
 #include "sbuf.h"
 #include "struct.h"

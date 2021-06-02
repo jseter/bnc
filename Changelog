@@ -1,3 +1,11 @@
+2.9.3
+(1) SECURITY FIX: FD_SETSIZE overflow DOS
+(2) SSL support can now be used if configured with --with-ssl
+    SSL connection is done by passing -s
+    ex.  /quote conn -s ircs.server
+    Note:  this is only partially secure since SSL is only supported
+    outgoing.
+
 2.9.2
 (1) Added flush to logging
 (2) General code changes to fix compiling on some compilers

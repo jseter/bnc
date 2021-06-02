@@ -33,11 +33,26 @@
 #include <openssl/rand.h>
 #endif
 
-#include "config.h"
 #include "sbuf.h"
 #include "struct.h"
 #include "send.h"
 #include "ctcp.h"
+
+#define S_READ   1
+#define S_WRITE  2
+#define S_EXCEPT 4
+
+struct selectfds
+{
+	int fd_setsize;
+	size_t size;
+	int nfds;
+	fd_set *rfds;
+	fd_set *wfds;
+	fd_set *efds;
+};
+
+
 
 
 extern int h_errno;
@@ -54,7 +69,6 @@ extern char *helplista[];
 
 extern unsigned char motdb[];
 
-int highfd;
 int a_sock = 0;
 int s_sock = 0;
 struct sockaddr_in muhsin;
@@ -63,6 +77,10 @@ int sinlen;
 
 unsigned char allbuf[PACKETBUFF+1];
 unsigned char buffer[PACKETBUFF+1];
+#ifdef HAVE_SSL
+SSL_CTX *SSLcontext;
+#endif
+
 
 int setnonblock(int fd)
 {
@@ -322,22 +340,42 @@ int connokay (struct sockaddr_in *sa, confetti * jr)
 	return 0;
 }
 
+int lsock_read(struct lsock *ls, void *buf, size_t len)
+{
+#ifdef HAVE_SSL
+	if(ls->ssl)
+		return SSL_read(ls->ssl, buf, len);
+#endif
+	return recv(ls->fd, buf, len, 0);
+}
 
-int send_queued(struct lsock *cptr)
+int lsock_write(struct lsock *ls, void *buf, size_t len)
+{
+#ifdef HAVE_SSL
+	if(ls->ssl)
+		return SSL_write(ls->ssl, buf, len);
+#endif
+	return send(ls->fd, buf, len, 0);
+}
+
+
+
+int send_queued(struct lsock *ls)
 {
 	int res;
 	int length;
 	char *msg;
 
 	
-	while(sbuf_getlength(&cptr->sendq) > 0)
+	while(sbuf_getlength(&ls->sendq) > 0)
 	{
-		msg = sbuf_pagemap(&cptr->sendq, &length);
+		msg = sbuf_pagemap(&ls->sendq, &length);
 		if(msg == NULL)
 			break; /*XXX*/
 		if(length <= 0)
 			break; /*XXX*/
-		res = send(cptr->fd, msg, length, 0);
+//		res = send(ls->fd, msg, length, 0);
+		res = lsock_write(ls, msg, length);
 		if(res == -1)
 		{
 			if(errno == EINTR)
@@ -346,11 +384,10 @@ int send_queued(struct lsock *cptr)
 				break;
 			return -1;
 		}
-		sbuf_delete(&cptr->sendq, res);
+		sbuf_delete(&ls->sendq, res);
 	}
 	return 0;
 }
-
 
 
 int wipeclient(struct cliententry *cptr)
@@ -494,7 +531,7 @@ int identwd_unlock(int s, struct sockaddr_in *sin, int port, char *uname)
 	return -1;
 }
 
-int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass, int ctype)
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass, int ctype, int cflags)
 {
 	int fd;
 	int res;
@@ -726,6 +763,32 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 	strncpy (cptr->sid, server, HOSTLEN);
 	cptr->sid[HOSTLEN]='\0';
 
+#ifdef HAVE_SSL
+	cptr->srv.ssl = NULL;
+	if(cflags & USE_SSL)
+	{
+		cptr->srv.ssl = SSL_new(SSLcontext);
+		if(cptr->srv.ssl == NULL)
+		{
+			close(fd);
+			return -1;
+		}
+		SSL_set_fd(cptr->srv.ssl, fd);
+		res = SSL_connect(cptr->srv.ssl);
+		if(res < 0)
+		{
+			int SSLerror;
+			SSLerror = SSL_get_error(cptr->srv.ssl, res);
+			if(!(SSLerror == SSL_ERROR_WANT_READ || SSLerror == SSL_ERROR_WANT_WRITE))
+			{
+				SSL_free(cptr->srv.ssl);
+				close(fd);
+				return -1;
+			}
+		}
+	}
+#endif
+
 	cptr->srv.fd = fd;
 	cptr->flags |= FLAGCONNECTED;
 
@@ -832,18 +895,64 @@ int handleclient (struct cliententry *cptr, int fromwho, int buflen, char *buf)
 	return f;
 }
 
-void initldcc(fd_set *rfds)
+
+void growfds(struct selectfds *fds, int hint)
+{
+	int x;
+	struct selectfds nset;
+
+	if(hint < fds->fd_setsize)
+		return;
+
+	x = (hint + (FD_SETSIZE - 1)) / FD_SETSIZE;
+	nset.fd_setsize = FD_SETSIZE * x;
+	nset.size = sizeof(*nset.rfds) * x;
+	
+	nset.rfds = realloc(fds->rfds, nset.size);
+	nset.wfds = realloc(fds->wfds, nset.size);
+	nset.efds = realloc(fds->efds, nset.size);
+	if((nset.rfds == NULL)
+	|| (nset.wfds == NULL)
+	|| (nset.efds == NULL))
+		  bnckill(FATALITY); // not enough memory for basic functions
+
+	memset( ((char *)nset.rfds) + fds->size, 0, nset.size - fds->size);
+	memset( ((char *)nset.wfds) + fds->size, 0, nset.size - fds->size);
+	memset( ((char *)nset.efds) + fds->size, 0, nset.size - fds->size);
+
+	fds->size = nset.size;
+	fds->fd_setsize = nset.fd_setsize;
+	fds->rfds = nset.rfds;
+	fds->wfds = nset.wfds;
+	fds->efds = nset.efds;
+}
+
+void selectfd(struct selectfds *fds, int fd, int flags)
+{
+	if(fd < 0)
+		bnckill(FATALITY);
+	if(fd >= fds->fd_setsize)
+		growfds(fds, fd); // no return on fail
+	if(flags & S_READ)
+		FD_SET(fd, fds->rfds);
+	if(flags & S_WRITE)
+		FD_SET(fd, fds->wfds);
+	if(flags & S_EXCEPT)
+		FD_SET(fd, fds->efds);
+	if(fd >= fds->nfds)
+		fds->nfds = fd + 1;
+}
+
+void initldcc(struct selectfds *fds)
 {
 	struct ldcc *dccptr;
 	for(dccptr = headldcc; dccptr; dccptr=dccptr->next)
 	{
-		FD_SET(dccptr->fd, rfds);	
-		if(dccptr->fd > highfd)
-			highfd = dccptr->fd;
+		selectfd(fds, dccptr->fd, S_READ);
 	}
 }
 
-void chkldcc(fd_set *rfds)
+void chkldcc(struct selectfds *fds)
 {
 	int res;
 	struct sockaddr_in sin;
@@ -856,7 +965,9 @@ void chkldcc(fd_set *rfds)
 	dccptr = headldcc;
 	while(dccptr)
 	{
-		if(FD_ISSET(dccptr->fd, rfds))
+		if(dccptr->fd >= 0
+		&& dccptr->fd < fds->fd_setsize
+		&& FD_ISSET(dccptr->fd, fds->rfds))
 		{
 			sinlen = sizeof(sin);
 			res = accept(dccptr->fd, (struct sockaddr *)&sin, &sinlen);
@@ -892,6 +1003,7 @@ void chkldcc(fd_set *rfds)
 				free(mptr);
 				goto terml;			
 			}
+			
 			setnonblock(mptr->rfd);
 rr_conn:
 			res = connect(mptr->rfd, &dccptr->sin, dccptr->sinlen);
@@ -927,35 +1039,27 @@ donext:
 	}	
 }
 
-void initpdcc(fd_set *rfds, fd_set *wfds)
+void initpdcc(struct selectfds *fds)
 {
 	struct pdcc *dccptr;
 	for(dccptr = headpdcc; dccptr; dccptr=dccptr->next)
 	{
 		if(sbuf_getlength(&dccptr->rsendq) > 0)
 		{
-			FD_SET(dccptr->rfd, wfds);
-			if(dccptr->rfd > highfd)
-				highfd = dccptr->rfd;
+			selectfd(fds, dccptr->rfd, S_WRITE);
 		}
 		else
 		{
-			FD_SET(dccptr->lfd, rfds);
-			if(dccptr->lfd > highfd)
-				highfd = dccptr->lfd;
+			selectfd(fds, dccptr->lfd, S_READ);
 		}
 
 		if(sbuf_getlength(&dccptr->lsendq) > 0)
 		{
-			FD_SET(dccptr->lfd, wfds);
-			if(dccptr->lfd > highfd)
-				highfd = dccptr->lfd;
+			selectfd(fds, dccptr->lfd, S_WRITE);
 		}
 		else
 		{
-			FD_SET(dccptr->rfd, rfds);
-			if(dccptr->rfd > highfd)
-				highfd = dccptr->rfd;
+			selectfd(fds, dccptr->rfd, S_READ);
 		}
 	}
 }
@@ -1013,7 +1117,7 @@ int dccrecv(int fd, struct sbuf *recvq)
 }
 
 
-void chkpdcc(fd_set *rfds, fd_set *wfds)
+void chkpdcc(struct selectfds *fds)
 {
 	int res;
 	struct pdcc *dccptr;
@@ -1024,7 +1128,9 @@ void chkpdcc(fd_set *rfds, fd_set *wfds)
 	dccptr = headpdcc;
 	while(dccptr)
 	{
-		if(dccptr->lfd >= 0 && FD_ISSET(dccptr->lfd, wfds))
+		if(dccptr->lfd >= 0
+		&& dccptr->lfd < fds->fd_setsize
+		&& FD_ISSET(dccptr->lfd, fds->wfds))
 		{
 			res = dccsend(dccptr->lfd, &dccptr->lsendq);
 			if(res)
@@ -1032,7 +1138,9 @@ void chkpdcc(fd_set *rfds, fd_set *wfds)
 
 		}
 
-		if(dccptr->rfd >= 0 && FD_ISSET(dccptr->rfd, wfds))
+		if(dccptr->rfd >= 0
+		&& dccptr->rfd < fds->fd_setsize
+		&& FD_ISSET(dccptr->rfd, fds->wfds))
 		{
 			res = dccsend(dccptr->rfd, &dccptr->rsendq);
 			if(res)
@@ -1040,7 +1148,9 @@ void chkpdcc(fd_set *rfds, fd_set *wfds)
 		}
 
 
-		if(dccptr->lfd >= 0 && FD_ISSET(dccptr->lfd, rfds))
+		if(dccptr->lfd >= 0
+		&& dccptr->lfd < fds->fd_setsize
+		&& FD_ISSET(dccptr->lfd, fds->rfds))
 		{
 			res = dccrecv(dccptr->lfd, &dccptr->rsendq);
 			if(res == 1)
@@ -1049,7 +1159,9 @@ void chkpdcc(fd_set *rfds, fd_set *wfds)
 				goto done_leof;
 		}
 	
-		if(dccptr->rfd >= 0 && FD_ISSET(dccptr->rfd, rfds))
+		if(dccptr->rfd >= 0
+		&& dccptr->rfd < fds->fd_setsize
+		&& FD_ISSET(dccptr->rfd, fds->rfds))
 		{
 			res = dccrecv(dccptr->rfd, &dccptr->lsendq);
 			if(res == 1)
@@ -1095,16 +1207,11 @@ done_reof:
 
 }
 
-void initclient(fd_set *rfds, fd_set *wfds)
+void initclient(struct selectfds *fds)
 {
 	struct cliententry *cptr;
 	int length;
 		
-	highfd = s_sock;
-	FD_ZERO(rfds);
-	FD_ZERO(wfds);
-
-
 	for(cptr=headclient;cptr;cptr=cptr->next)
 	{
 		/* handle write set first */
@@ -1124,9 +1231,7 @@ void initclient(fd_set *rfds, fd_set *wfds)
 						cptr->srv.flags &= ~FLAGDRAIN;
 				}
 			
-				FD_SET(cptr->loc.fd, wfds);
-				if(cptr->loc.fd > highfd)
-					highfd = cptr->loc.fd;
+				selectfd(fds, cptr->loc.fd, S_WRITE);
 			}
 		}
 
@@ -1145,42 +1250,35 @@ void initclient(fd_set *rfds, fd_set *wfds)
 					if(cptr->loc.fd >= 0)
 						cptr->loc.flags &= ~FLAGDRAIN;
 				}
-				FD_SET(cptr->srv.fd, wfds);
-				if(cptr->srv.fd > highfd)
-					highfd = cptr->srv.fd;
+				selectfd(fds, cptr->srv.fd, S_WRITE);
 			}
 		}
 
 		/* now set read(s) if not draining */
 		if(cptr->loc.fd > -1 && !(cptr->loc.flags & FLAGDRAIN))
 		{
-			FD_SET(cptr->loc.fd, rfds);
-			if (cptr->loc.fd > highfd)
-			{
-				highfd = cptr->loc.fd;
-			}
+			selectfd(fds, cptr->loc.fd, S_READ);
 		}
 		
 		if(cptr->flags & FLAGCONNECTED && cptr->srv.fd > -1 && !(cptr->srv.flags & FLAGDRAIN) )
 		{
-			FD_SET(cptr->srv.fd,rfds);
-			if (cptr->srv.fd > highfd)
-			{
-				highfd = cptr->srv.fd;
-			}
+			selectfd(fds, cptr->srv.fd, S_READ);
 		}
 	}
 }
 
+
 char mline[512];
-int scanclient (struct cliententry *cptr, fd_set * rfds)
+int scanclient (struct cliententry *cptr, struct selectfds *fds)
 {
 	int f;
 	int res;
 
-	if(cptr->loc.fd >= 0 && FD_ISSET(cptr->loc.fd, rfds))
+	if(cptr->loc.fd >= 0
+	&& cptr->loc.fd < fds->fd_setsize
+	&& FD_ISSET(cptr->loc.fd, fds->rfds))
 	{
-		res = recv(cptr->loc.fd, allbuf, PACKETBUFF, 0);
+		res = lsock_read(&cptr->loc, allbuf, PACKETBUFF);
 		if(res == -1)
 		{
 			if(errno == EINTR || errno == EAGAIN)
@@ -1234,9 +1332,11 @@ int scanclient (struct cliententry *cptr, fd_set * rfds)
 cr_out:
 
 	
-	if(cptr->srv.fd >= 0 && FD_ISSET(cptr->srv.fd, rfds))
+	if(cptr->srv.fd >= 0
+	&& cptr->srv.fd < fds->fd_setsize
+	&& FD_ISSET(cptr->srv.fd, fds->rfds))
 	{
-		res = recv(cptr->srv.fd, allbuf, PACKETBUFF, 0);
+		res = lsock_read(&cptr->srv, allbuf, PACKETBUFF);
 		if(res == -1)
 		{
 			if(errno == EINTR || errno == EAGAIN)
@@ -1273,7 +1373,7 @@ sr_out:
 }
 
 
-void chkclient(fd_set *rfds, fd_set *wfds)
+void chkclient(struct selectfds *fds)
 {
 	int p;
 	struct cliententry *cptr;
@@ -1281,11 +1381,13 @@ void chkclient(fd_set *rfds, fd_set *wfds)
 
 	for(cptr=headclient;cptr;cptr=cptr->next)
 	{
-		p=scanclient(cptr,rfds);
+		p=scanclient(cptr,fds);
 		if(p)
 			goto han_err;
 		
-		if(cptr->loc.fd >= 0 && FD_ISSET(cptr->loc.fd, wfds))
+		if(cptr->loc.fd >= 0
+		&& cptr->loc.fd < fds->fd_setsize
+		&& FD_ISSET(cptr->loc.fd, fds->wfds))
 		{
 			p = send_queued(&cptr->loc);
 			if(p == -1)
@@ -1296,7 +1398,9 @@ void chkclient(fd_set *rfds, fd_set *wfds)
 
 		}
 
-		if(cptr->srv.fd >= 0 && FD_ISSET(cptr->srv.fd, wfds))
+		if(cptr->srv.fd >= 0
+		&& cptr->srv.fd < fds->fd_setsize
+		&& FD_ISSET(cptr->srv.fd, fds->wfds))
 		{
 			p = send_queued(&cptr->srv);
 			if(p == -1)
@@ -1427,6 +1531,14 @@ int initproxy (confetti * jr)
 	struct sockaddr_in6 sin6;
 	struct hostent *he;
 
+#if HAVE_SSL
+	SSL_library_init();
+	SSLeay_add_ssl_algorithms();
+	SSL_load_error_strings();
+	ERR_load_crypto_strings();
+	SSLcontext = SSL_CTX_new(SSLv23_client_method());
+#endif
+
 
 	memset(&sin4, 0, sizeof(sin4));
 	sin4.sin_family = AF_INET;
@@ -1491,20 +1603,37 @@ int initproxy (confetti * jr)
 
 int ircproxy (confetti * jr)
 {
-	int p,r,nfd;
+	int res;
+	int r,nfd;
 	struct sockaddr_in nin;
 	socklen_t ninlen;
-	fd_set rfds;
-	fd_set wfds;
+	struct selectfds set;
 	jack = jr;
+
+	memset(&set, 0, sizeof(set));
+	set.nfds = 0;
+	set.fd_setsize = 0;
+	set.rfds = NULL;
+	set.wfds = NULL;
+	set.efds = NULL;
+
+	growfds(&set, getdtablesize());	
 	
 	for(;;)
 	{
-		initclient(&rfds,&wfds);
-		initpdcc(&rfds, &wfds);
-		initldcc(&rfds);
-		FD_SET(s_sock, &rfds);
-		if ((p = select (highfd + 1, &rfds, &wfds, (fd_set *) 0, NULL)) < 0)
+		set.nfds = 0;
+		memset(set.rfds, 0, set.size);
+		memset(set.wfds, 0, set.size);
+		memset(set.efds, 0, set.size);
+
+		initclient(&set);
+		initpdcc(&set);
+		initldcc(&set);
+
+		selectfd(&set, s_sock, S_READ);
+
+		res = select(set.nfds, set.rfds, set.wfds, set.efds, NULL);
+		if(res == -1)
 		{
 			if(errno == ENOMEM)
 			{
@@ -1512,11 +1641,14 @@ int ircproxy (confetti * jr)
 			}
 			bnckill(FATALITY);
 		}
-		if (FD_ISSET (s_sock, &rfds))
+
+		if(s_sock >= 0
+		&& s_sock < set.fd_setsize
+		&& FD_ISSET(s_sock, set.rfds))
 		{
 			ninlen = sizeof(nin);
 			nfd = accept (s_sock, (struct sockaddr *) &nin, &ninlen);
-			if(nfd >= 0)
+			if(nfd != -1)
 			{
 				r=addon_client(nfd,&nin);
 				if(r == -1)
@@ -1525,9 +1657,9 @@ int ircproxy (confetti * jr)
 				}
 			}
 		}
-		chkldcc(&rfds);
-		chkpdcc(&rfds,&wfds);
-		chkclient(&rfds,&wfds);
+		chkldcc(&set);
+		chkpdcc(&set);
+		chkclient(&set);
 	}
 	return 0;
 }

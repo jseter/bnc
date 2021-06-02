@@ -9,8 +9,18 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+
+#ifdef HAVE_SSL
+#include <openssl/crypto.h>
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#endif
+
+
                      
-#include "config.h"
 #include "sbuf.h"
 #include "struct.h"
 #include "send.h"
@@ -24,7 +34,7 @@ extern int bewmstick (void);
 extern int logprint(confetti *jr,const char *format,...);
 extern int send_queued(struct lsock *cptr);
 extern int passwordokay (char *s, char *pass);
-int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass, int ctype);
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass, int ctype, int cflags);
 extern int thestat(char *buf,int len, struct cliententry *cptr);
 extern struct cliententry *getclient(struct cliententry *cptr, int nfd);
 extern void add_access (confetti *, accesslist *);
@@ -365,11 +375,11 @@ int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **parg
 			/* handle the autoconn stuff, disabled for now */
 			if (cptr->susepass)
 			{
-				r=irc_connect(cptr, cptr->autoconn, cptr->sport, cptr->autopass, 0);
+				r=irc_connect(cptr, cptr->autoconn, cptr->sport, cptr->autopass, 0, 0);
 			}
 			else
 			{
-				r=irc_connect(cptr, cptr->autoconn, cptr->sport, NULL, 0);
+				r=irc_connect(cptr, cptr->autoconn, cptr->sport, NULL, 0, 0);
 			}
 
 #if 0
@@ -936,6 +946,7 @@ int cmd_conn(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 	int cport;
 //	int res;
 	int ctype;
+	int cflags;
 	char *host;
 	char *port;
 	char *pass;
@@ -943,6 +954,7 @@ int cmd_conn(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 	int p;
 	
 	ctype = 0;
+	cflags = 0;
 	
 	host = port = pass = NULL;
 	for(p = 1; p < pargc; p++)
@@ -953,6 +965,10 @@ int cmd_conn(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 			src++;
 			if(*src == '6')
 				ctype = 1;
+#ifdef HAVE_SSL
+			if(*src == 's')
+				cflags |= USE_SSL;
+#endif
 			continue;
 		}
 		if(host == NULL)
@@ -968,7 +984,7 @@ int cmd_conn(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 
 	cport = port != NULL ? mytoi(port) : jack->cport;
 
-	irc_connect(cptr, host, cport, pass, ctype);
+	irc_connect(cptr, host, cport, pass, ctype, cflags);
 
 	return 0;
 }

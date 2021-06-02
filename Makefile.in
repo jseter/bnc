@@ -1,6 +1,5 @@
 LIBS=@LIBS@
-CFLAGS=-O3 -Wall
-OFLAGS=-O3
+CFLAGS=-O3 -Wall -include config.h
 CC=@CC@
 
 ALL: bnc mkpasswd
@@ -8,7 +7,7 @@ ALL: bnc mkpasswd
 mkpasswd:mkpasswd.c
 	${CC} ${CFLAGS} -o mkpasswd mkpasswd.c ${LIBS} 
 bnc: bnc.o conf.o server.o cmds.o ctcp.o send.o sbuf.o Makefile
-	${CC} ${OFLAGS} -o bnc bnc.o conf.o server.o cmds.o ctcp.o sbuf.o send.o ${LIBS}
+	${CC} -o bnc bnc.o conf.o server.o cmds.o ctcp.o sbuf.o send.o ${LIBS}
 
 bnc.o: config.h struct.h bnc.c Makefile
 	${CC} ${CFLAGS} -c bnc.c
