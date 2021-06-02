@@ -50,7 +50,11 @@ int sbuf_put(struct sbuf *record, const void *message, size_t length)
 		chunk = SBUFMTU - offset;
 		if(chunk > length)
 			chunk = length;
-		goto putblk;
+		/* Copy the block into the buffer */
+		memcpy( data, message, chunk);
+		message = (void *)(((unsigned char *)message) + chunk);
+		record->length += chunk;
+		length -= chunk;
 	}
 	
 	while(length)
@@ -69,7 +73,6 @@ int sbuf_put(struct sbuf *record, const void *message, size_t length)
 
 		chunk = length > SBUFMTU ? SBUFMTU : length;
 		data = voiddata(bucket);
-putblk:
 		/* Copy the block into the buffer */
 		memcpy( data, message, chunk);
 		message = (void *)(((unsigned char *)message) + chunk);
@@ -221,7 +224,7 @@ int sbuf_getmsg(struct sbuf *record, char *buf, size_t length)
 			}
 			
 			if(nlcount)
-				goto gotline;
+				break;
 			
 			tlength++;
 			if(d < eod)
@@ -231,10 +234,9 @@ int sbuf_getmsg(struct sbuf *record, char *buf, size_t length)
 		res = sbuf_nextchunk(&state);
 	}
 
-	if(nlcount)
-		goto gotline;
-	return 0;
-gotline:
+	if(nlcount == 0)
+		return 0;
+
 	sbuf_delete(record, nlcount + tlength);
 	if(d >= eod)
 		d = eod-1;
@@ -243,94 +245,3 @@ gotline:
 }
 
 
-int sbuf_gettag(struct sbuf *record, char *buf, size_t length)
-{
-	struct sbufstate state;
-	int res;
-	char *d;
-	char *s;
-	char *eos;
-	char *eod;
-	int esc;
-	int nl;
-	int cmt;
-	size_t rlength;
-	size_t tlength;
-	
-	cmt = 0;
-	esc = 0;
-	tlength = 0;
-	nl = 1;
-	
-	d = buf;
-	eod = buf + length;
-	
-	bzero(&state, sizeof(state));
-	res = sbuf_firstchunk(record, &state);
-	while(res == 0)
-	{
-		s = sbuf_statemap(&state, &rlength);
-		eos = s + rlength;
-		for(;s < eos; s++)
-		{
-			tlength++;
-			if(cmt)
-			{
-				if((*s == '\r') || (*s == '\n'))
-				{
-					nl = 1;
-					continue;
-				}
-				
-				if(nl == 1)
-					cmt = 0;
-				/* fall through */
-			}
-			if(nl && (*s == '#'))
-			{
-				cmt = 1;
-				nl = 0;
-			}
-			if(esc)
-			{
-				esc = 0;
-				if(d < eod)
-					*d++ = *s;
-				continue;
-			}
-			
-			if(*s == '\\')
-			{
-				esc = 1;
-				continue;
-			}
-			if(nl && ((*s == ' ') || (*s == '\t')))
-				continue;
-				
-			if((*s == '\r') || (*s == '\n'))
-			{
-				if(nl == 0)
-				{
-					if(d < eod)
-						*d++ = ' ';
-				}
-				nl = 1;
-				continue;
-			}
-			nl = 0;
-			if(*s == ';')
-				goto gotline;
-			if(d < eod)
-				*d++ = *s;
-		}
-		res = sbuf_nextchunk(&state);
-	}
-
-	return 0;
-gotline:
-	sbuf_delete(record, tlength);
-	if(d >= eod)
-		d = eod-1;
-	*d++ = '\0';
-	return d - buf;
-}

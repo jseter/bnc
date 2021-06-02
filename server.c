@@ -107,6 +107,7 @@ int logprint(confetti *jr, const char *format, ...)
 	if(tp != NULL)
 		fprintf(jr->logfile, "%.3s %.3s%3d %02d:%02d:%02d %d ", dayweek[tp->tm_wday], month[tp->tm_mon], tp->tm_mday, tp->tm_hour, tp->tm_min, tp->tm_sec, tp->tm_year + 1900);
 	vfprintf(jr->logfile, format, ap);
+	fflush(jr->logfile);
 	va_end(ap);
 	return 0;
 }
@@ -1420,45 +1421,50 @@ int initproxy (confetti * jr)
 {
 	int opt;
 	int res;
-	int family;
+	struct sockaddr *sin;
+	socklen_t sinlen;
 	struct sockaddr_in sin4;
 	struct sockaddr_in6 sin6;
 	struct hostent *he;
 
-	family = AF_INET;
+
+	memset(&sin4, 0, sizeof(sin4));
+	sin4.sin_family = AF_INET;
+	sin4.sin_port = htons(jr->dport);
+	sin4.sin_addr.s_addr = INADDR_ANY;
+
+	memset(&sin6, 0, sizeof(sin6));
+	sin6.sin6_family = AF_INET6;
+	sin6.sin6_port = htons(jr->dport);
+	sin6.sin6_addr = in6addr_any;
+
+	sin = (struct sockaddr *)&sin4;
+	sinlen = sizeof(sin4);
 
 	if(*jr->dhost)
 	{
-		memset(&sin4, 0, sizeof(sin4));
-		sin4.sin_family = AF_INET;
-		sin4.sin_port = htons(jr->dport);
-
-		memset(&sin6, 0, sizeof(sin6));
-		sin6.sin6_family = AF_INET6;
-		sin6.sin6_port = htons(jr->dport);
-
-
 		res = inet_pton(AF_INET, jr->dhost, &sin4.sin_addr);
 		if(res == 0)
 		{
 			res = inet_pton(AF_INET6, jr->dhost, &sin6.sin6_addr);
-			if(res != 0)
+			if(res == 1)
 			{
-				family = AF_INET6;
+				sin = (struct sockaddr *)&sin6;
+				sinlen = sizeof(sin6);
 			}
-			else
+			else if(res == 0)
 			{
 				he = gethostbyname(jr->dhost);
 				if (he)
+				{
 					memcpy (&sin4.sin_addr, he->h_addr, he->h_length);
-				else
-					sin4.sin_addr.s_addr = INADDR_ANY;
+				}
 			}
 		}
 	}	
 
-	s_sock = socket (family, SOCK_STREAM, 0);
-	if (s_sock < 0)
+	s_sock = socket(sin->sa_family, SOCK_STREAM, 0);
+	if(s_sock < 0)
 	{
 		return SOCKERR;
 	}
@@ -1467,10 +1473,7 @@ int initproxy (confetti * jr)
 	setsockopt (s_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof (opt));
 
 
-	if(family == AF_INET)
-		res = bind(s_sock, (struct sockaddr *)&sin4, sizeof(sin4));
-	else /* if(family == AF_INET6) */
-		res = bind(s_sock, (struct sockaddr *)&sin6, sizeof(sin6));
+	res = bind(s_sock, sin, sinlen);
 
 	if(res == -1)
 	{
