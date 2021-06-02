@@ -7,11 +7,11 @@ STATIC = -static
 all: bnc
 
 bnc: $(OBJS)
-	gcc -o $@ $^
+	gcc -o bnc bnc.c
 	strip bnc
 
 bnc-static: $(OBJS)
-	gcc $(STATIC) $(LIBS) -o $@ $^
+	gcc -o bnc bnc.c
 	strip bnc
 
 clean: 

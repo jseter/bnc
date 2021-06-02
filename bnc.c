@@ -98,6 +98,10 @@ server(int s)
 			nck=strtok(NULL," \n\r");
 			if(nck)
 			  n=0;
+			if(p=1){
+				sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :You need to say /quote PASS <password>\n",nck);
+				write(s, buffer, strlen(buffer));
+			}
 		}
 		else                                       
 	        if(!strncasecmp(buffer, "PASS ", 5)){
