@@ -1,10 +1,15 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <ctype.h>
 
-#include "common.h"
+#include "config.h"
+#include "sbuf.h"
+#include "struct.h"
+#include "send.h"
+
 unsigned int req = 0;
 extern void *pmalloc(size_t size);
 #define CONFCMD(x) int x(confetti * jr, int pargc, char **pargv)

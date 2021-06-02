@@ -1,4 +1,3 @@
-OBJS = bnc.o conf.o server.o cmds.o mtype.o
 LIBS = @LIBS@
 OPTS = -O3
 COPT = -Wall
@@ -10,19 +9,23 @@ ALL: bnc mkpasswd
 
 mkpasswd:mkpasswd.c
 	${CC} ${OPTS} ${COPT} ${LIBS} -o mkpasswd mkpasswd.c
-bnc.o: config.h common.h bnc.c Makefile
-	${CC} ${OPTS} ${COPT} -c bnc.c
-conf.o: config.h common.h conf.c Makefile
-	${CC} ${OPTS} ${COPT} -c conf.c
-cmds.o: config.h common.h cmds.c Makefile
-	${CC} ${OPTS} ${COPT} -c cmds.c
-server.o: config.h common.h server.c Makefile
-	${CC} ${OPTS} ${COPT} -c server.c
-mtype.o: mtype.c
-	${CC} ${OPTS} ${COPT} -c mtype.c 
-bnc: ${OBJS} Makefile
-	${CC} ${OPTS} ${OOPT} ${LIBS} -o bnc ${OBJS}
+bnc: bnc.o conf.o server.o cmds.o send.o sbuf.o Makefile
+	${CC} ${OPTS} ${OOPT} -o bnc bnc.o conf.o server.o cmds.o sbuf.o send.o ${LIBS}
 #	${STRIP} bnc
+
+bnc.o: config.h struct.h bnc.c Makefile
+	${CC} ${OPTS} ${COPT} -c bnc.c
+conf.o: config.h struct.h conf.c Makefile
+	${CC} ${OPTS} ${COPT} -c conf.c
+cmds.o: config.h struct.h cmds.c Makefile
+	${CC} ${OPTS} ${COPT} -c cmds.c
+server.o: config.h struct.h server.c Makefile
+	${CC} ${OPTS} ${COPT} -c server.c
+send.o: send.c send.h Makefile
+	${CC} ${OPTS} ${COPT} -c send.c
+sbuf.o: sbuf.c
+	${CC} ${OPTS} ${COPT} -c sbuf.c
+
 clean:
 	rm -rf *.o *~ core bnc mkpasswd
 dist-clean: clean

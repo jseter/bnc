@@ -1,6 +1,14 @@
+2.8.6
+(1) Bnc now lists all docked sessions
+(2) Rewrote the send/recv code
+(3) Implemented non-blocking sockets
+(4) Fixed a problem with bnc not binding to vhost when specified by IP
+       instead of dns
+
 2.8.4
 (1) a quick change added to conf.c by moomoomoo to fix a major bug and tide
 	us over until the 3.0.0 version is ready for public release.
+
 2.8.2
 (1) Coded in channel watching code for docking.
 (2) Coded a new line parsing system

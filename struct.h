@@ -1,7 +1,4 @@
-#include "config.h"
-#include "mtype.h"
-
-#define VERSION "v2.8.2"
+#define VERSION "v2.8.6"
 #define PACKETBUFF 1024
 
 #define KILLCURRENTUSER 100
@@ -29,6 +26,7 @@
 #define FLAGCONNECTED 64
 #define FLAGKEEPALIVE 128
 #define FLAGDOCKED 256
+#define FLAGCONNECTING 512
 
 #define CLIENT 0
 #define SERVER 1
@@ -40,51 +38,65 @@ struct chanentry
 	char chan[1]; 
 };
 
+struct lsock
+{
+	int fd;
+	int flags;
+	struct sbuf sendq;
+	struct sbuf recvq;
+};
+
+
 struct cliententry
 {
-  struct cliententry *next;
-  struct cliententry *prev;
-  char nick[NICKLEN + 1];
-  char uname[USERLEN + 1];
-  char fromip[HOSTLEN + 1];
-  char realname[REALLEN + 1];
-  char vhost[HOSTLEN + 1];
-  char onserver[HOSTLEN + 1];
-  char sid[HOSTLEN +1]; /* for docking purposes */
-  char autoconn[HOSTLEN + 1];
-  char autopass[PASSLEN + 1]; /* replaced with docking pass when docked */
-  int sport;
-  int susepass;
-  unsigned int flags;
-  int docked;
-  int fd;
-  int sfd;
-  int pfails;
-  int blen;
-  char biff[BUFSIZE];
-  int slen;
-  char siff[BUFSIZE];
-  PAGE page_client;
-  PAGE page_server;
-  struct chanentry *headchan;
+	struct cliententry *next;
+	struct cliententry *prev;
+	char nick[NICKLEN + 1];
+	char uname[USERLEN + 1];
+	char fromip[HOSTLEN + 1];
+	char realname[REALLEN + 1];
+	char vhost[HOSTLEN + 1];
+	char onserver[HOSTLEN + 1];
+	char sid[HOSTLEN +1]; /* for docking purposes */
+	char autoconn[HOSTLEN + 1];
+	char autopass[PASSLEN + 1]; /* replaced with docking pass when docked */
+	int sport;
+	int susepass;
+	unsigned int flags;
+	int docked;
+//	int fd;
+//	int sfd;
+	int pfails;
+
+	struct lsock srv;
+	struct lsock loc;
+
+//	int blen;
+//	char biff[BUFSIZE];
+//	int slen;
+//	char siff[BUFSIZE];
+//	PAGE page_client;
+//	PAGE page_server;
+	struct chanentry *headchan;
 };
+
+
 
 #define BUILTIN_COMMAND(x) int x(struct cliententry *list_ptr, char *prefix, int pargc, char **pargv)
 
 typedef struct
 {
-   char *name;
-   int (*func)(struct cliententry *, char *, int, char **);
-   unsigned int flags_on;
-   unsigned int flags_off;
+	char *name;
+	int (*func)(struct cliententry *, char *, int, char **);
+	unsigned int flags_on;
+	unsigned int flags_off;
 } cmdstruct;
 
 
 struct vhostentry
 {
-    struct vhostentry  *next;
-    char vhost[HOSTLEN+1];   
-    
+	struct vhostentry  *next;
+	char vhost[HOSTLEN+1];   
 };
 
 struct alist_struct {

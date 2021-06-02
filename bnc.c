@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -13,7 +14,11 @@
 #endif
 
 #include <unistd.h>
-#include "common.h"
+#include "config.h"
+#include "sbuf.h"
+#include "struct.h"
+#include "send.h"
+
 
 #ifndef VERSION
 #define VERSION "v?.?.?"

@@ -6,7 +6,7 @@
    \  \_______/  \  \__\\  \ __\  \  \_______\
     \/_______/    \/__/   \/__/    \/_______/   IRC PROXY
    
-BNC 2.8.4 (c) 1998-99 by James Seter AKA Pharos on efnet
+BNC 2.8.6 (c) 1998-2002 by James Seter AKA Pharos on efnet
 Site:
   http://gotbnc.com
 
@@ -93,11 +93,11 @@ BNC                             IRC Proxy Daemon              April 1998
    Optional Logging of connects, failures, and other important data.
    Identwd dynamic ident support for on-the-fly per-user ident changing.
 
-1.2 Failures
 
-   BNC at this time cannot do the following:
 
-     Not sure, the last thing it couldn't do is now in the Features :D
+
+
+
 
 
 
@@ -116,10 +116,10 @@ BNC                             IRC Proxy Daemon              April 1998
    Things I hope to accomplish in later versions:
 
    Ban lists. (skip that, allow lists work just fine)
-   Non-Blocking sockets.
    More Admin commands.
    DCC automatic redirection through Proxy.
-   Irc Docking
+   Improve the IRC Docking
+
 
 2.  COMPILATION
 
@@ -249,6 +249,12 @@ BNC                             IRC Proxy Daemon              April 1998
      This will initialize a connection to the real irc server and begin
      the two-way communication between you and the real irc server,
      ending the bnc command session.
+   DOCK <password>
+     This will dock the current session to the background, closing your
+     client if keepalive is off.
+   RESUME <session> <password>
+     This will resume a docked session.  If the server closes on a docked
+     session, it will no longer be resumable.
    KEEPALIVE
      turns on the keepalive function, instead of killing your connection
      when irc dies it resumes to BNC server mode.
