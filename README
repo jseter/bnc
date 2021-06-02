@@ -7,7 +7,7 @@
 	I would tell you how to un-tar/gz this file, but your
   reading this so why would you need help :-)
 	To compile bnc simply type:
-  gcc -o advbnc advbnc.c
+  gcc -o bnc bnc.c
 
 3.CONFIGURATION
 	The configuration file give BNC the nessesary info to
@@ -15,9 +15,11 @@
   when a conn is requested, also passwords and maxusers.
 
 4.RUNNING
-	Still working on making it do this itself but to load
-  the daemon type:
-  nohup advbnc&
+  type:
+  advbnc
+
+	As you can guess i succeeded in making it do the nohup bnc&
+  by itself.
 
 5.CLIENT SIDE
 	When using various clients you connect to the server in

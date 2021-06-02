@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -238,7 +239,7 @@ main(int argc, char *argv[])
        	struct sockaddr_in sin;
 	int sinlen;
 	int mypid;
-        
+                                                                                                                                                                                             
         pt=6667;
         mu=100;
         dp=6667;
@@ -274,6 +275,21 @@ main(int argc, char *argv[])
 		perror("listen");
 		exit(0);
 	}
+	        
+        signal(SIGHUP, SIG_IGN);
+        switch(fork())
+        {
+	        case -1:
+         	       	printf("fatal error: unable to fork()");
+                	exit(-1);
+                case 0:
+                setsid();
+                break;
+                default:
+                exit(0);
+      
+        }
+
 	while(1)
 	{
 		sinlen = sizeof(sin);
@@ -292,7 +308,7 @@ main(int argc, char *argv[])
 				server(a_sock);
 				exit(0);
 		}
-		while(waitpid(-1, NULL, (int) NULL) > 0) ;
+		while(waitpid(-1, NULL, WNOHANG) > 0) ;
 	}
 }
 
