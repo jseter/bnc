@@ -496,13 +496,18 @@ int identwd_unlock(int s, struct sockaddr_in *sin, int port, char *uname)
 	return -1;
 }
 
-
-int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass)
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass, int ctype)
 {
 	int fd;
 	int res;
 	struct hostent *he;
-	struct sockaddr_in sin;
+	int rfamily;
+	int lfamily;
+	int dolocal;
+	struct sockaddr_in lsin4;
+	struct sockaddr_in rsin4;
+	struct sockaddr_in6 lsin6;
+	struct sockaddr_in6 rsin6;
 
 	
 	cptr->flags &= ~FLAGAUTOCONN;
@@ -523,9 +528,144 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 	sbuf_clear(&cptr->srv.recvq);
 
 	
-	tprintf(&cptr->loc, "NOTICE AUTH :Making reality through %s port %i\n", server, port);	
+	tprintf(&cptr->loc, "NOTICE AUTH :Making reality through %s port %i\n", server, port);
 
-	fd = socket (AF_INET, SOCK_STREAM, 0);
+	memset(&lsin4, 0, sizeof(lsin4));
+	memset(&rsin4, 0, sizeof(rsin4));
+	memset(&lsin6, 0, sizeof(lsin6));
+	memset(&rsin6, 0, sizeof(rsin6));	
+	
+	lfamily = rfamily = AF_INET;
+	
+	do
+	{
+		res = inet_pton(AF_INET, server, &rsin4.sin_addr);
+		if(res)
+		{
+			rfamily = AF_INET;
+			break;
+		}
+		
+		res = inet_pton(AF_INET6, server, &rsin6.sin6_addr);
+		if(res)
+		{
+			rfamily = AF_INET6;
+			break;
+		}
+		
+		if(ctype == 1)
+		{
+			he = gethostbyname2(server, AF_INET6);
+			if(he)
+			{
+				rfamily = AF_INET6;
+				memcpy(&rsin6.sin6_addr, he->h_addr, he->h_length);
+				break;
+			}
+		}
+		
+		he = gethostbyname(server);
+		if(he)
+		{
+			rfamily = AF_INET;
+			memcpy(&rsin4.sin_addr, he->h_addr, he->h_length);
+			break;
+		}
+		
+		if(ctype != 1)
+		{
+			he = gethostbyname2(server, AF_INET6);
+			if(he)
+			{
+				rfamily = AF_INET;
+				memcpy(&rsin4.sin_addr, he->h_addr, he->h_length);
+				break;
+			}
+		}
+		
+		return -1;
+	} while(0);
+
+	
+	do
+	{
+		char *server;
+		server = cptr->vhost;
+		if(server == NULL)
+		{
+			dolocal = 0;
+			break;
+		}
+		
+		dolocal = 1;
+		
+		res = inet_pton(AF_INET, server, &lsin4.sin_addr);
+		if(res)
+		{
+			lfamily = AF_INET;
+			break;
+		}
+		
+		res = inet_pton(AF_INET6, server, &lsin6.sin6_addr);
+		if(res)
+		{
+			lfamily = AF_INET6;
+			break;
+		}
+		
+		if(ctype == 1)
+		{
+			he = gethostbyname2(server, AF_INET6);
+			if(he)
+			{
+				lfamily = AF_INET6;
+				memcpy(&lsin6.sin6_addr, he->h_addr, he->h_length);
+				break;
+			}
+		}
+		
+		he = gethostbyname(server);
+		if(he)
+		{
+			lfamily = AF_INET;
+			memcpy(&lsin4.sin_addr, he->h_addr, he->h_length);
+			break;
+		}
+		
+		if(ctype != 1)
+		{
+			he = gethostbyname2(server, AF_INET6);
+			if(he)
+			{
+				lfamily = AF_INET;
+				memcpy(&lsin4.sin_addr, he->h_addr, he->h_length);
+				break;
+			}
+		}
+		
+		lfamily = AF_INET;
+		dolocal = 0;
+	} while(0);
+
+	if(dolocal && lfamily != rfamily)
+		dolocal = 0;
+
+
+	if(rfamily == AF_INET)
+	{
+		rsin4.sin_family = AF_INET;
+		rsin4.sin_port = htons (port);	
+	}
+	else /* if(rfamily = AF_INET6) */
+	{
+		rsin6.sin6_family = AF_INET6;
+		rsin6.sin6_port = htons(port);
+	}
+
+	lsin4.sin_family = AF_INET;
+
+
+	fd = socket (rfamily, SOCK_STREAM, 0);
 	if(fd == -1)
 	{
 		tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection\n");
@@ -540,50 +680,23 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 		return -1;
 	}
 	
-	memset (&sin, 0, sizeof (struct sockaddr_in));
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = INADDR_ANY;
-	
-	if(cptr->vhost)
+	if(dolocal)
 	{
-		res = inet_aton(cptr->vhost, &sin.sin_addr);
-		if(res == 0)
-		{
-			he = gethostbyname(cptr->vhost);
-			if (he)
-				memcpy (&sin.sin_addr, he->h_addr, he->h_length);
-			else
-				sin.sin_addr.s_addr = INADDR_ANY;
-		}
+		if(lfamily == AF_INET)
+			bind (fd, (struct sockaddr *) &lsin4, sizeof(lsin4));
+		else /* if(lfamily == AF_INET6) */
+			bind(fd, (struct sockaddr *) &lsin6, sizeof(lsin6));
 	}
 
-	res = bind (fd, (struct sockaddr *) &sin, sizeof(struct sockaddr_in));
-	if(res == -1)
-	{
-		tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection (Supplied Vhost is not on this system)\n");
-		close(fd);
-		return -1;
-	}
 
-	memset (&sin, 0, sizeof (struct sockaddr_in));
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons (port);
-	sin.sin_addr.s_addr = INADDR_ANY;
+	if(rfamily == AF_INET && jack->identwd)
+		identwd_lock(&rsin4, port);
 
-	res = inet_aton(server, &sin.sin_addr);
-	if(res == 0)
-	{
-		he = gethostbyname(server);
-		if (he)
-			memcpy (&sin.sin_addr, he->h_addr, he->h_length);
-		else
-			sin.sin_addr.s_addr = INADDR_ANY;
-	}
-
-	if (jack->identwd)
-		identwd_lock(&sin, port);
-
-	res = connect (fd, (struct sockaddr *) &sin, sizeof (sin));
+	if(rfamily == AF_INET)
+		res = connect(fd, (struct sockaddr *)&rsin4, sizeof(rsin4));
+	else /* if(rfamily == AF_INET6) */
+		res = connect(fd, (struct sockaddr *)&rsin6, sizeof(rsin6));
+		
 	if( res == -1)
 	{
 		switch(errno)
@@ -603,8 +716,8 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 		logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, server);	
 	}
 
-	if (jack->identwd)
-		identwd_unlock(fd, &sin, port, cptr->uname);
+	if(rfamily == AF_INET && jack->identwd)
+		identwd_unlock(fd, &rsin4, port, cptr->uname);
 
 	strncpy (cptr->onserver, server, HOSTLEN);
 	cptr->onserver[HOSTLEN]='\0';
@@ -1306,41 +1419,68 @@ int initproxy (confetti * jr)
 {
 	int opt;
 	int res;
+	int family;
+	struct sockaddr_in sin4;
+	struct sockaddr_in6 sin6;
 	struct hostent *he;
 
-	s_sock = socket (AF_INET, SOCK_STREAM, 0);
+	family = AF_INET;
+
+	if(*jr->dhost)
+	{
+		res = inet_pton(AF_INET, jr->dhost, &sin4.sin_addr);
+		if(res == 0)
+		{
+			res = inet_pton(AF_INET6, jr->dhost, &sin6.sin6_addr);
+			if(res != 0)
+			{
+				family = AF_INET6;
+			}
+			else
+			{
+				he = gethostbyname(jr->dhost);
+				if (he)
+					memcpy (&sin4.sin_addr, he->h_addr, he->h_length);
+				else
+					sin4.sin_addr.s_addr = INADDR_ANY;
+			}
+		}
+	}	
+
+	if(family == AF_INET)
+	{
+		memset(&sin4, 0, sizeof(sin4));
+		sin4.sin_family = AF_INET;
+		sin4.sin_port = htons(jr->dport);
+	}
+	else /* if(family == AF_INET6) */
+	{
+		memset(&sin6, 0, sizeof(sin6));
+		sin6.sin6_family = AF_INET6;
+		sin6.sin6_port = htons(jr->dport);
+	}
+
+	s_sock = socket (family, SOCK_STREAM, 0);
 	if (s_sock < 0)
 	{
 		return SOCKERR;
 	}
-	memset (&muhsin, 0, sizeof (struct sockaddr_in));
-
-	muhsin.sin_family = AF_INET;
-	muhsin.sin_port = htons (jr->dport);
-	muhsin.sin_addr.s_addr = INADDR_ANY;
-
-	if(*jr->dhost)
-	{
-		res = inet_aton(jr->dhost, &muhsin.sin_addr);
-		if(res == 0)
-		{
-			he = gethostbyname(jr->dhost);
-			if (he)
-				memcpy (&muhsin.sin_addr, he->h_addr, he->h_length);
-			else
-				muhsin.sin_addr.s_addr = INADDR_ANY;
-		}
-	}
-
 
 	opt = 1;
 	setsockopt (s_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof (opt));
 
-	if (bind (s_sock, (struct sockaddr *) &muhsin, sizeof (struct sockaddr_in)) < 0)
+
+	if(family == AF_INET)
+		res = bind(s_sock, (struct sockaddr *)&sin4, sizeof(sin4));
+	else /* if(family == AF_INET6) */
+		res = bind(s_sock, (struct sockaddr *)&sin6, sizeof(sin6));
+
+	if(res == -1)
 	{
 		close (s_sock);
 		return BINDERR;
 	}
+
 	if (listen (s_sock, 10) < 0)
 	{
 		return LISTENERR;

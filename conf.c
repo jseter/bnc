@@ -26,7 +26,6 @@ CONFCMD(gen_w);
 CONFCMD(gen_a);
 CONFCMD(gen_b);
 CONFCMD(gen_i);
-CONFCMD(conf_listen);
 CONFCMD(conf_password);
 CONFCMD(conf_allow);
 
@@ -127,16 +126,41 @@ CONFCMD(conf_listen)
 	port = pargv[1];
 	for(src = pargv[1]; *src; src++)
 	{
+		if(*src == '[')
+		{
+			for(src++; *src; src++)
+			{
+				if(*src == ']')
+				{
+					src++;
+					break;
+				}
+			}
+		}
+			
 		if(*src == ':')
 		{
+			int flag;
 			port = src + 1;
 			dest = jr->dhost;
 			eod = dest + HOSTLEN;
-			if(HOSTLEN > src - pargv[1])
-				eod = dest + (src - pargv[1]);
+			flag = 0;
 			
 			for(src = pargv[1]; *src; src++)
 			{
+				if( *src == '[' && (flag & 1) == 0)
+				{
+					flag |= 1;
+					continue;
+				}
+				if( *src == ']' && (flag & 1) == 1)
+				{
+					flag &= ~1;
+					continue;
+				}
+				if( *src == ':' && (flag & 1) == 0)
+					break;
+			
 				if(dest >= eod)
 					break;
 				*dest++ = *src;

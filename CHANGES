@@ -12,6 +12,11 @@
 (7) Increased error checking in recv code.
 (8) Better parsing of messages
 (9) Server buffers always cleared when connecting to a new server.
+(10) Initial IPv6 support.  Added -6 option to the CONN command
+     (i.e. CONN -6 irc.ipv6.org) which is only necessary on ambigious
+     addresses or when connecting via dns.
+(11) Listen host can be specified in conf as an ipv6 address by putting 
+     the address in []'s (i.e. LISTEN [2000:610:0:23::]:6669)
 
 2.8.6
 (1) Bnc now lists all docked sessions

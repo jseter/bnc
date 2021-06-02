@@ -22,7 +22,7 @@ extern int bewmstick (void);
 extern int logprint(confetti *jr,const char *format,...);
 extern int send_queued(struct lsock *cptr);
 extern int passwordokay (char *s, char *pass);
-int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass);
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass, int ctype);
 extern int thestat(char *buf,int len, struct cliententry *cptr);
 extern struct cliententry *getclient(struct cliententry *cptr, int nfd);
 extern void add_access (confetti *, accesslist *);
@@ -391,11 +391,11 @@ int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **parg
 			/* handle the autoconn stuff, disabled for now */
 			if (cptr->susepass)
 			{
-				r=irc_connect(cptr, cptr->autoconn, cptr->sport, cptr->autopass);
+				r=irc_connect(cptr, cptr->autoconn, cptr->sport, cptr->autopass, 0);
 			}
 			else
 			{
-				r=irc_connect(cptr, cptr->autoconn, cptr->sport, NULL);
+				r=irc_connect(cptr, cptr->autoconn, cptr->sport, NULL, 0);
 			}
 
 #if 0
@@ -966,23 +966,42 @@ BUILTIN_COMMAND(cmd_main)
 BUILTIN_COMMAND(cmd_conn)
 {
 	int cport;
-	int res;
+//	int res;
+	int ctype;
+	char *host;
+	char *port;
+	char *pass;
+	char *src;
+	int p;
 	
+	ctype = 0;
+	
+	host = port = pass = NULL;
+	for(p = 1; p < pargc; p++)
+	{
+		src = pargv[p];
+		if(*src == '-')
+		{
+			src++;
+			if(*src == '6')
+				ctype = 1;
+			continue;
+		}
+		if(host == NULL)
+			host = src;
+		else if(port == NULL)
+			port = src;
+		else if(pass == NULL)
+			pass = src;
+	}
 
-	if (pargc < 2)
+	if (host == NULL)
 		return 0;
 
-	cport = (pargc > 2) ? mytoi(pargv[2]) : jack->cport;
+	cport = port != NULL ? mytoi(port) : jack->cport;
 
-	if (pargc > 3)
-		res=irc_connect(cptr, pargv[1], cport, pargv[3]);
-	else
-		res=irc_connect(cptr, pargv[1], cport, NULL);
+	irc_connect(cptr, host, cport, pass, ctype);
 
-#if 0
-	if(res > 1)
-		return res;
-#endif
 	return 0;
 }
 
