@@ -13,6 +13,9 @@
 /* define this if you have vsnprintf() */
 #undef HAVE_VSNPRINTF
 
+/* define this if you have gethostbyname2() */
+#undef HAVE_GETHOSTBYNAME2
+
 /* Define if you have <sys/wait.h> that is POSIX.1 compatible.  */
 #undef HAVE_SYS_WAIT_H
 

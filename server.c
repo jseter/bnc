@@ -89,18 +89,6 @@ struct pdcc *headpdcc;
 struct ldcc *headldcc;
 
 
-#if 0
-int logprint(confetti *jr,const char *format,...)
-{
-  int p;
-  va_list ap;
-  va_start(ap,format);
-  p = vsprintf(buffer, PACKETBUFF, format, ap);
-  va_end(ap);
-  bnclog(jr,buffer);
-  return p;
-}
-#endif
 
 int logprint(confetti *jr, const char *format, ...)
 {
@@ -298,7 +286,7 @@ int passwordokay (char *s, char *pass)
 	else
 		encr = s;
 
-	if(!strncmp(encr, pass, 10))
+	if(!strcmp(encr, pass) == 0)
 		return 1;
 
 	return 0;
@@ -311,7 +299,7 @@ int connokay (struct sockaddr_in *sa, confetti * jr)
 	accesslist *na;
 
 	hp = gethostbyaddr ((char *) &sa->sin_addr, sizeof (struct in_addr), AF_INET);
-	logprint(jack, "Connection from %s", inet_ntoa (sa->sin_addr));
+	logprint(jack, "Connection from %s\n", inet_ntoa (sa->sin_addr));
 
 	if (!jr->has_alist)
 	{
@@ -561,7 +549,8 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 			rfamily = AF_INET6;
 			break;
 		}
-		
+
+#ifdef HAVE_GETHOSTBYNAME2		
 		if(ctype == 1)
 		{
 			he = gethostbyname2(server, AF_INET6);
@@ -572,7 +561,7 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 				break;
 			}
 		}
-		
+#endif
 		he = gethostbyname(server);
 		if(he)
 		{
@@ -580,18 +569,19 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 			memcpy(&rsin4.sin_addr, he->h_addr, he->h_length);
 			break;
 		}
-		
+
+#ifdef HAVE_GETHOSTBYNAME2
 		if(ctype != 1)
 		{
 			he = gethostbyname2(server, AF_INET6);
 			if(he)
 			{
-				rfamily = AF_INET;
-				memcpy(&rsin4.sin_addr, he->h_addr, he->h_length);
+				rfamily = AF_INET6;
+				memcpy(&rsin6.sin6_addr, he->h_addr, he->h_length);
 				break;
 			}
 		}
-		
+#endif
 		return -1;
 	} while(0);
 
@@ -621,7 +611,8 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 			lfamily = AF_INET6;
 			break;
 		}
-		
+
+#ifdef HAVE_GETHOSTBYNAME2
 		if(ctype == 1)
 		{
 			he = gethostbyname2(server, AF_INET6);
@@ -632,7 +623,7 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 				break;
 			}
 		}
-		
+#endif
 		he = gethostbyname(server);
 		if(he)
 		{
@@ -640,18 +631,19 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 			memcpy(&lsin4.sin_addr, he->h_addr, he->h_length);
 			break;
 		}
-		
+
+#ifdef HAVE_GETHOSTBYNAME2
 		if(ctype != 1)
 		{
 			he = gethostbyname2(server, AF_INET6);
 			if(he)
 			{
-				lfamily = AF_INET;
-				memcpy(&lsin4.sin_addr, he->h_addr, he->h_length);
+				lfamily = AF_INET6;
+				memcpy(&lsin6.sin6_addr, he->h_addr, he->h_length);
 				break;
 			}
 		}
-		
+#endif
 		lfamily = AF_INET;
 		dolocal = 0;
 	} while(0);
@@ -722,7 +714,7 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 	else
 	{
 		tprintf(&cptr->loc, "NOTICE AUTH :Suceeded connection\n");
-		logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, server);	
+		logprint(jack, "(%i) %s!%s@%s connected to %s\n", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, server);	
 	}
 
 	if(rfamily == AF_INET && jack->identwd)
@@ -1315,7 +1307,7 @@ void chkclient(fd_set *rfds, fd_set *wfds)
 			{
 				cptr->flags &= ~FLAGCONNECTING;
 				tprintf(&cptr->loc, "NOTICE AUTH :Suceeded connection\n");
-				logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, cptr->onserver);
+				logprint(jack, "(%i) %s!%s@%s connected to %s\n", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, cptr->onserver);
 			}
 		}
 
@@ -1502,7 +1494,7 @@ int ircproxy (confetti * jr)
 {
 	int p,r,nfd;
 	struct sockaddr_in nin;
-	int ninlen;
+	socklen_t ninlen;
 	fd_set rfds;
 	fd_set wfds;
 	jack = jr;
@@ -1525,10 +1517,13 @@ int ircproxy (confetti * jr)
 		{
 			ninlen = sizeof(nin);
 			nfd = accept (s_sock, (struct sockaddr *) &nin, &ninlen);
-			r=addon_client(nfd,&nin);
-			if(r == -1)
+			if(nfd >= 0)
 			{
-				close(nfd);
+				r=addon_client(nfd,&nin);
+				if(r == -1)
+				{
+					close(nfd);
+				}
 			}
 		}
 		chkldcc(&rfds);

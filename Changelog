@@ -1,3 +1,11 @@
+2.9.0
+(1) Added trailing newlines to log records
+(2) Added extra error handling on accepting connections
+(3) Fixed buffer overflow in getnickuserhost (reported by Leon Juranic)
+(4) Added extra check for gethostbyname2
+(5) Made password check more thorough
+(6) Fixed ipv6 dns resolving to random ipv4
+
 2.8.9
 (1) Fixed backspace security flaw (reported by Yak)
 (2) Fixed compile errors related to compound statements

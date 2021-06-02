@@ -4,7 +4,7 @@ MYPID=$$
 TMPFILE=.bnc$MYPID.tmp
 RSLFILE=.bnc$MYPID.rsl
 VHTFILE=.bnc$MYPID.vht
-BSVERSION="0.5 for BNC2.8.9"
+BSVERSION="0.6 for BNC2.9.0"
 SAVEFILE=./bnc.conf
 
 bsclean()

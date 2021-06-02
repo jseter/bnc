@@ -281,65 +281,14 @@ int wipechan(struct cliententry *cptr, char *chan)
 	return 0;
 }
 
-
-int getnickuserhost(char **argv,char *buf,char *fix)
-{
-	int p,c;
-	c=0;
-	argv[0]=buf;
-
-	for(p=0;buf[p];p++)
-	{
-		if(buf[p] == '!')
-		{
-			buf[p]='\0';
-			fix[c++]='!';
-			argv[1]=&buf[p+1];
-		}
-		if(buf[p] == '@')
-		{
-			buf[p]='\0';
-			fix[c++]='@';
-			argv[2]=&buf[p+1];
-		}
-	}
-	return c;
-}
-
 int ismenuh(char *prefix, char *nick)
 {
-	int p,repc,c,f,m;
-	char repv[3];
-	char *nuh[3];
-
+	char *src;
 	if(prefix == NULL)
-	{
 		return 0;
-	}
-
-	m=0;
-	c=strlen(prefix);
-	
-	repc = getnickuserhost(nuh, prefix, repv);
-	
-	
-	if(!strncasecmp(nick, nuh[0],NICKLEN))
-	{
-		m=1;
-	}
-	f=0;
-	for(p=0;p<c;p++)
-	{
-		if( prefix[p] == '\0' )
-		{
-			if(repc > 0)
-			{
-				prefix[p]=repv[f++];
-				repc--;
-			}
-		}
-	}
-	return m;
+	for(src = prefix; *src && *src != '!'; ++src);
+	return ((strncasecmp(nick, prefix, src - prefix) == 0)
+		&& (nick[src - prefix] == 0));
 }
 
 void list_docks(struct cliententry *cptr)
@@ -607,47 +556,22 @@ int srv_join(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 
 int srv_nick(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
-	int p,repc,c,f;
-	char repv[3];
-	char *nuh[3];
-	char *arf="UNKNOWN";
-	nuh[0]=arf;
-	nuh[1]=arf;
-	nuh[2]=arf;
-	
 	if(pargc < 2)
 	{
 		return 0;
 	}
+
 	if(prefix == NULL)
-	{
 		return 0;
-	}
-	c=strlen(prefix);
-	
-	repc = getnickuserhost(nuh, prefix, repv);
 	
 	
-	if(!strncasecmp(cptr->nick, nuh[0],NICKLEN))
+	if(ismenuh(prefix, cptr->nick))
 	{
 		strncpy( cptr->nick, pargv[1], NICKLEN);
-		cptr->nick[NICKLEN]='\0';
-	}
-	f=0;
-	for(p=0;p<c;p++)
-	{
-		if( prefix[p] == '\0' )
-		{
-			if(repc > 0)
-			{
-				prefix[p]=repv[f++];
-				repc--;
-			}
-		}
+		cptr->nick[NICKLEN]='\0';	
 	}
 	
  	return FORWARDCMD;
-	
 }
 
 int srv_tellnick(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
@@ -948,7 +872,7 @@ int cmd_pass(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 	{
 		return KILLCURRENTUSER;
 	}
-	logprint(jack, "Failed pass from %s password %s", cptr->fromip, sargv[0]);
+	logprint(jack, "Failed pass from %s password %s\n", cptr->fromip, sargv[0]);
 	if( cptr->flags & FLAGNICK )
 	{
 		tprintf(&cptr->loc, "NOTICE AUTH :Failed Pass!!\n");
@@ -1003,7 +927,7 @@ int cmd_main(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 		tprintf(&cptr->loc, "NOTICE AUTH :Welcome Supervisor!!\n");
 	    return 0;
 	}
-	logprint(jack, "Failed MAIN from %s", cptr->fromip);
+	logprint(jack, "Failed MAIN from %s\n", cptr->fromip);
 	tprintf(&cptr->loc, "NOTICE AUTH :Failed Main!!\n");
 	return 0;
 }
@@ -1195,14 +1119,14 @@ int cmd_who(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 int cmd_bdie(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	tprintf(&cptr->loc, "NOTICE AUTH :Shutting it down....\n");
-	logprint(jack,"Shutdown called by %s@%s",cptr->nick,cptr->fromip);
+	logprint(jack,"Shutdown called by %s@%s\n",cptr->nick,cptr->fromip);
 	bnckill(FATALITY);
 	return 0;
 }
 int cmd_die(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	tprintf(&cptr->loc, "NOTICE AUTH :Shutting it down....\n");
-	logprint(jack,"Shutdown called by %s@%s",cptr->nick,cptr->fromip);
+	logprint(jack,"Shutdown called by %s@%s\n",cptr->nick,cptr->fromip);
 	bewmstick ();
 	return 0;
 }
@@ -1264,7 +1188,7 @@ int cmd_bkill(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 	}
 
 	tprintf(&cptr->loc, "NOTICE AUTH :Killed %i\n", p);
-	logprint(jack, "BKILL to %s@%s", client_ptr->nick, client_ptr->fromip);
+	logprint(jack, "BKILL to %s@%s\n", client_ptr->nick, client_ptr->fromip);
 
 	if(client_ptr->prev == NULL)
 		headclient=client_ptr->next;
@@ -1294,7 +1218,7 @@ int cmd_addhost(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 	na->addr[HOSTLEN]='\0';
 	na->next = NULL;
 	add_access (jack, na);
-	logprint(jack, "ADDHOST %s", pargv[2]);
+	logprint(jack, "ADDHOST %s\n", pargv[2]);
 	return 0;
 }
 

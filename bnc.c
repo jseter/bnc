@@ -238,7 +238,7 @@ int main (int argc, char **argv)
 		fprintf (mylife, "%i\n", getpid ());
 		fclose (mylife);
 	}
-	logprint(&bncconf, "BNC started. pid %i", getpid ());
+	logprint(&bncconf, "BNC started. pid %i\n", getpid ());
 	tmps = ircproxy (&bncconf);
 	if(tmps)
 	{
