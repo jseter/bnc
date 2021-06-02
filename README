@@ -14,12 +14,9 @@
   process such as the port to bind to and what port to request
   when a conn is requested, also passwords and maxusers.
 
-4.RUNNING
+4.LOADING
   type:
   bnc
-
-	As you can guess i succeeded in making it do the nohup bnc&
-  by itself.
 
 5.CLIENT SIDE
 	When using various clients you connect to the server in

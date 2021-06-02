@@ -20,6 +20,7 @@ void
 child_killer(int s)
 {
         wait(NULL);
+        cu--;
         signal(SIGCHLD, child_killer);
 }
 
@@ -264,7 +265,7 @@ main(int argc, char *argv[])
         cu=0;
         po=0;
 	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.0.16 GNU project (C) 1997-98\n");
+	printf("\nIrc Proxy v2.0.17 GNU project (C) 1997-98\n");
 	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
 	
 	if(loadconf()) {
@@ -320,11 +321,20 @@ main(int argc, char *argv[])
                         perror("accept");
                         continue;
                 }
+                
+                cu++;
+          
+                if((cu>mu) && (mu>0)){
+                	close(a_sock);
+                	cu--;
+                	continue;
+                }
                 switch(fork())
                 {
                         case -1:
-                                continue;
+                        	continue;
                         case 0:
+                     	
                                 server(a_sock);
                                 exit(0);
                 }
