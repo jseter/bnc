@@ -1,10 +1,14 @@
 #include "config.h"
+#include "mtype.h"
 
+#define VERSION "v2.8.2"
 #define PACKETBUFF 1024
 
 #define KILLCURRENTUSER 100
 #define SERVERDIED 300
 #define FORWARDCMD 1
+
+#define DOCKEDFD -10
 
 #define BUFSIZE 512
 #define PASSLEN 16
@@ -13,6 +17,7 @@
 #define USERLEN 10
 #define REALLEN 50
 #define AUTOCON 1024
+#define FILELEN 256
 
 #define FLAGNONE 0
 #define FLAGSUPER 1
@@ -23,10 +28,17 @@
 #define FLAGAUTOCONN 32
 #define FLAGCONNECTED 64
 #define FLAGKEEPALIVE 128
+#define FLAGDOCKED 256
 
 #define CLIENT 0
 #define SERVER 1
 
+struct chanentry
+{
+	struct chanentry *next;
+	struct chanentry *prev;
+	char chan[1]; 
+};
 
 struct cliententry
 {
@@ -38,11 +50,13 @@ struct cliententry
   char realname[REALLEN + 1];
   char vhost[HOSTLEN + 1];
   char onserver[HOSTLEN + 1];
+  char sid[HOSTLEN +1]; /* for docking purposes */
   char autoconn[HOSTLEN + 1];
-  char autopass[PASSLEN + 1];
+  char autopass[PASSLEN + 1]; /* replaced with docking pass when docked */
   int sport;
   int susepass;
   unsigned int flags;
+  int docked;
   int fd;
   int sfd;
   int pfails;
@@ -50,7 +64,9 @@ struct cliententry
   char biff[BUFSIZE];
   int slen;
   char siff[BUFSIZE];
-
+  PAGE page_client;
+  PAGE page_server;
+  struct chanentry *headchan;
 };
 
 #define BUILTIN_COMMAND(x) int x(struct cliententry *list_ptr, char *prefix, int pargc, char **pargv)
@@ -80,24 +96,27 @@ typedef struct alist_struct accesslist;
 
 typedef struct
 {
-    char pidfile[256];
-    unsigned int dport;
-    unsigned int maxusers;
-    char dpass[PASSLEN+1];
-    int dpassf;
-    unsigned int cport;
-    int identwd;
-    int logf;
-    FILE *logfile;
-    FILE *identlie;
-    struct vhostentry *vhostlist;
-    accesslist *alist, *alist_end;
-    int has_alist;
-    char vhostdefault[HOSTLEN+1];
-    char spass[PASSLEN+1];
-    int usemotd;
-    int mtype;
-    char motdf[256];
+	unsigned int dport;
+	unsigned int maxusers;
+	unsigned int cport;
+	
+	int dpassf;
+	int identwd;
+	int logf;
+	int has_alist;
+	int usemotd;
+	int mtype;
+	
+	FILE *logfile;
+	FILE *identlie;
+	struct vhostentry *vhostlist;
+	accesslist *alist, *alist_end;
+
+	char vhostdefault[HOSTLEN+1];
+	char spass[PASSLEN+1];
+	char dpass[PASSLEN+1];
+	char pidfile[FILELEN];
+	char motdf[FILELEN+1];
 } confetti;
 
 #define CONFNOTFOUND 1

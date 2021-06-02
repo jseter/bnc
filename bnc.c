@@ -103,6 +103,18 @@ void bnckill (int reason)
 	exit (reason);
 }
 
+void *pmalloc(size_t size)
+{
+	void *s;
+	s=malloc(size);
+	if(s == NULL)
+	{
+		bnckill(FATALITY);
+	
+	}
+	return s;
+}
+
 int main (int argc, char **argv)
 {
 	int tmps;

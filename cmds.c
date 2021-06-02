@@ -23,7 +23,12 @@ extern struct cliententry *getclient(struct cliententry *list_ptr, int nfd);
 extern void add_access (confetti *, accesslist *);
 extern int wipeclient(struct cliententry *list_ptr);
 extern confetti *jack;
+extern int chanlist(char *buf,int len, struct cliententry *client);
 extern struct cliententry *headclient;
+extern void *pmalloc(size_t size);
+extern int mytoi(char *buf);
+extern unsigned char touppertab[];
+extern unsigned char tolowertab[];
 
 unsigned char motdb[MAXMOTDLINE];
 
@@ -89,14 +94,29 @@ BUILTIN_COMMAND(cmd_keepalive);
 BUILTIN_COMMAND(cmd_rawecho);
 BUILTIN_COMMAND(cmd_bmsg);
 BUILTIN_COMMAND(cmd_prefixrawecho);
+BUILTIN_COMMAND(cmd_dock);
+BUILTIN_COMMAND(cmd_resume);
+BUILTIN_COMMAND(cmd_resumealive);
+BUILTIN_COMMAND(cmd_dumpll);
+BUILTIN_COMMAND(cmd_bypass);
 
 BUILTIN_COMMAND(srv_nick);
 BUILTIN_COMMAND(srv_tellnick);
+BUILTIN_COMMAND(srv_join);
+BUILTIN_COMMAND(srv_kick);
+BUILTIN_COMMAND(srv_part);
+BUILTIN_COMMAND(srv_ping);
+BUILTIN_COMMAND(srv_endmotd);
 
 cmdstruct serverbnccmds[] =
 {
 	{ "NICK", srv_nick, FLAGCONNECTED, FLAGNONE },
+	{ "PING", srv_ping, FLAGCONNECTED | FLAGDOCKED, FLAGNONE },
 	{ "004", srv_tellnick, FLAGCONNECTED, FLAGNONE },
+	{ "JOIN", srv_join, FLAGCONNECTED, FLAGNONE },
+	{ "KICK", srv_kick, FLAGCONNECTED, FLAGNONE },
+	{ "PART", srv_part, FLAGCONNECTED, FLAGNONE },
+	{ "376", srv_endmotd, FLAGCONNECTED, FLAGNONE },
 	{NULL, NULL, 0,0}
 };
 
@@ -124,6 +144,12 @@ cmdstruct clientbnccmds[] =
  	{ "RAWECHO", cmd_rawecho, FLAGPASS, FLAGNONE },
  	{ "BMSG", cmd_bmsg, FLAGPASS, FLAGNONE },
  	{ "PRE", cmd_prefixrawecho , FLAGPASS | FLAGBASED, FLAGNONE },
+ 	{ "DOCK", cmd_dock, FLAGCONNECTED, FLAGNONE },
+ 	{ "DETACH", cmd_dock, FLAGCONNECTED, FLAGNONE },
+ 	{ "RESUME", cmd_resume, FLAGPASS, FLAGCONNECTED },
+ 	{ "RESUME", cmd_resumealive, FLAGPASS, FLAGNONE },
+ 	{ "DUMPLL", cmd_dumpll, FLAGNONE, FLAGNONE },
+ 	{ "BYPASS", cmd_bypass, FLAGCONNECTED, FLAGNONE },
 	{ NULL, NULL, 0, 0 }
 };
 
@@ -145,6 +171,101 @@ int remnl (char *buf, int size)
 	}
 	return p;
 }
+
+
+int irc_strcasecmp(const char *s1, const char *s2)
+{
+	int x;
+	
+	if(s1 == NULL)
+	{
+		return 1;
+	}
+	if(s2 == NULL)
+	{
+		return 1;
+	}
+
+	for(;*s1 && *s2; s1++, s2++)
+	{
+		x = touppertab[(unsigned char)*s1] - touppertab[(unsigned char)*s2];
+		
+		if(x)
+		{
+			return x;
+		}
+	}
+	/* should not need toupper or anything, since they both should be 0 */
+	if(*s1 == *s2)
+	{
+		return 0;
+	}
+	return 1;
+}
+int wipechans(struct cliententry *list_ptr)
+{
+	struct chanentry *ochan;
+	struct chanentry *chanlist;
+	
+	chanlist=list_ptr->headchan;
+	while(chanlist)
+	{
+		ochan=chanlist;
+		chanlist=chanlist->next;
+		
+		free(ochan);
+	}
+	list_ptr->headchan=NULL;
+	return 0;
+}
+
+struct chanentry *findchan(struct chanentry *chanlist, char *chan)
+{
+	while(chanlist)
+	{
+		if(!irc_strcasecmp(chanlist->chan,chan))
+		{
+			return chanlist;
+		}
+		chanlist=chanlist->next;
+	}
+	return NULL;
+}
+
+int wipechan(struct cliententry *list_ptr, char *chan)
+{
+	struct chanentry *chanlist;
+
+	if(list_ptr == NULL)
+	{
+		return 1;
+	}
+	
+	chanlist=findchan(list_ptr->headchan,chan);
+
+	if(chanlist == NULL)
+	{
+		return 1;
+	}
+	
+	if(chanlist->prev)
+	{
+		chanlist->prev->next = chanlist->next;
+	}
+	else
+	{
+		list_ptr->headchan=chanlist->next;
+	}
+			
+	if(chanlist->next)
+	{
+		chanlist->next->prev=chanlist->prev;
+	}
+			
+	free(chanlist);
+	return 0;
+}
+
 
 int getnickuserhost(char **argv,char *buf,char *fix)
 {
@@ -168,6 +289,42 @@ int getnickuserhost(char **argv,char *buf,char *fix)
 		}
 	}
 	return c;
+}
+
+int ismenuh(char *prefix, char *nick)
+{
+	int p,repc,c,f,m;
+	char repv[3];
+	char *nuh[3];
+
+	if(prefix == NULL)
+	{
+		return 0;
+	}
+
+	m=0;
+	c=strlen(prefix);
+	
+	repc = getnickuserhost(nuh, prefix, repv);
+	
+	
+	if(!strncasecmp(nick, nuh[0],NICKLEN))
+	{
+		m=1;
+	}
+	f=0;
+	for(p=0;p<c;p++)
+	{
+		if( prefix[p] == '\0' )
+		{
+			if(repc > 0)
+			{
+				prefix[p]=repv[f++];
+				repc--;
+			}
+		}
+	}
+	return m;
 }
 
 int irc_connect(struct cliententry *list_ptr, char *server, u_short port, char *pass)
@@ -232,6 +389,8 @@ int irc_connect(struct cliententry *list_ptr, char *server, u_short port, char *
 	}
 	strncpy (list_ptr->onserver, server, HOSTLEN);
 	list_ptr->onserver[HOSTLEN]='\0';
+	strncpy (list_ptr->sid, server, HOSTLEN);
+	list_ptr->sid[HOSTLEN]='\0';
 	r=sockprint(cs, "NICK %s\n", list_ptr->nick);
 	if(r < 0)
 	{
@@ -367,6 +526,121 @@ int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **
 	return w;
 }
 
+BUILTIN_COMMAND(srv_ping) 
+{
+	int r;
+	if(pargc < 2)
+	{
+		return 0;
+	}
+	r=sockprint(list_ptr->sfd, "PONG :%s\n", pargv[1] );
+	if(r < 0)
+	{
+		return SERVERDIED;
+	}
+	return 0; /* we don't wanna forward anything when docked */
+	
+}
+
+BUILTIN_COMMAND(srv_part)
+{
+	int m;
+	if(pargc < 2)
+	{
+		return FORWARDCMD;
+	}
+	m=ismenuh(prefix,list_ptr->nick);
+	if(!m) /* its not me, so forget it */
+	{
+		return FORWARDCMD;
+	}
+	wipechan(list_ptr,pargv[1]);
+	return FORWARDCMD;
+}
+
+BUILTIN_COMMAND(srv_kick)
+{
+	if(pargc < 3)
+	{
+		return FORWARDCMD;
+	}
+	if(!strncasecmp(list_ptr->nick, pargv[2] ,NICKLEN))
+	{
+		wipechan(list_ptr, pargv[1]);
+	}
+
+	return FORWARDCMD;
+}
+
+BUILTIN_COMMAND(srv_endmotd)
+{
+	int r;
+	struct chanentry *chanlist;
+	if(list_ptr->docked == 1) /* ok resuming is almost done */
+	{
+		list_ptr->docked = 0;
+		chanlist=list_ptr->headchan;
+		while(chanlist)
+		{
+			r=sockprint(list_ptr->fd,":%s!%s@%s JOIN %s\n",list_ptr->nick, list_ptr->uname, list_ptr->fromip, chanlist->chan );
+			if(r < 0)
+			{
+				return KILLCURRENTUSER;
+			}
+			
+			r=sockprint(list_ptr->sfd,"NAMES %s\n",chanlist->chan );
+			if(r < 0)
+			{
+				return KILLCURRENTUSER;
+			}
+			
+			
+			chanlist=chanlist->next;
+		}
+	}
+	return FORWARDCMD;
+}
+
+BUILTIN_COMMAND(srv_join)
+{
+	int r,p,m;
+	struct chanentry *chan;
+	if(pargc < 2)
+	{
+		return FORWARDCMD;
+	}
+	m=ismenuh(prefix,list_ptr->nick);
+	if(!m)
+	{
+		return FORWARDCMD;
+	}
+	
+	chan=findchan(list_ptr->headchan,pargv[1]);
+	if(chan != NULL)
+	{
+		return FORWARDCMD;
+	}
+	
+	p=strlen(pargv[1]);
+	chan=pmalloc(sizeof(struct chanentry)+p+1);
+	memset(chan->chan,0,p+1);
+
+	for(r=0;p>0;p--)
+	{
+		chan->chan[r]=pargv[1][r];
+		r++;
+	}
+	chan->prev=0;
+	chan->next=list_ptr->headchan;
+	if(list_ptr->headchan)
+	{
+		list_ptr->headchan->prev=chan;
+	}
+	list_ptr->headchan=chan;	
+	
+	return FORWARDCMD;
+}
+
 BUILTIN_COMMAND(srv_nick)
 {
 	int p,repc,c,f;
@@ -420,16 +694,180 @@ BUILTIN_COMMAND(srv_tellnick)
 	}
 	strncpy(list_ptr->nick,pargv[1],NICKLEN);
 	list_ptr->nick[NICKLEN]='\0';
+	if(prefix != NULL)
+	{
+		strncpy(list_ptr->sid,prefix,HOSTLEN);
+		list_ptr->sid[HOSTLEN]='\0';
+	}
 	return FORWARDCMD;
 }
 
+BUILTIN_COMMAND(cmd_resumealive)
+{
+	list_ptr->flags &= ~FLAGDOCKED;
+	return 0;
+}
 
+BUILTIN_COMMAND(cmd_resume)
+{
+	int r,sfd,m;
+	struct cliententry *client;
+	if(pargc < 3)
+	{
+		r=sockprint(list_ptr->fd,"NOTICE %s :Syntax, /quote resume dock_fd pass\n",list_ptr->nick);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		
+		return 0;
+	}
+	sfd=mytoi(pargv[1]);
+	client = getclient(headclient, sfd);
+	m=0;
+	if(client != NULL)
+	{
+		m=1;
+		if(!(client->flags & FLAGDOCKED))
+		{
+			m=0;
+		}
+	}
+	
+	if(!m)
+	{
+		r=sockprint(list_ptr->fd,"NOTICE %s :Docked fd not found\n",list_ptr->nick);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		return 0;
+	}
+	
+	if(!strncasecmp(client->autopass,pargv[2],PASSLEN))
+	{
+		r=sockprint(list_ptr->fd,"NOTICE %s :-*- Resuming session\n",list_ptr->nick);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+
+
+		if( strncasecmp(client->nick, list_ptr->nick, NICKLEN) )
+		{
+			r=sockprint(list_ptr->fd,":%s@%s!%s NICK :%s\n",list_ptr->nick,list_ptr->uname,list_ptr->fromip, client->nick);
+			if(r < 0)
+			{
+				return KILLCURRENTUSER;
+			}
+		}
+		
+		r=sockprint(list_ptr->fd, ":%s 001 %s :Welcome to a resumed bnc session\n", client->sid, client->nick);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		r=sockprint(list_ptr->fd, ":%s 002 %s :your host is %s, running an irc server\n", client->sid, client->nick, client->sid);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		r=sockprint(list_ptr->fd, ":%s 003 %s :%s runs docked bnc\n", client->sid, client->nick, client->sid);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		r=sockprint(list_ptr->fd, ":%s 004 %s %s 234123 _____ ______\n", client->sid, client->nick, client->sid);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		r=sockprint(client->sfd,"LUSERS\nMOTD\n");
+		if(r < 0)
+		{
+			return SERVERDIED;
+		}
+		
+		client->docked=1;
+		client->fd=list_ptr->fd;
+		client->flags &= ~FLAGDOCKED;
+		list_ptr->fd=-1;
+		list_ptr->sfd=-1;
+		return KILLCURRENTUSER;
+	
+	}
+	else
+	{
+		r=sockprint(list_ptr->fd,"NOTICE %s :incorrect resume pass\n",list_ptr->nick);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+	}
+	return 0;	
+}
+
+BUILTIN_COMMAND(cmd_dock)
+{
+	int r;
+	if(pargc < 2)
+	{
+		r=sockprint(list_ptr->fd,"NOTICE %s :/quote DOCK pass\n",list_ptr->nick);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		return 0;
+	}
+	r=sockprint(list_ptr->fd,"NOTICE %s :To resume, /quote resume %i %s\n",list_ptr->nick,list_ptr->sfd,pargv[1]);
+	if(r < 0)
+	{
+		return KILLCURRENTUSER;
+	}
+	strncpy(list_ptr->autopass, pargv[1], PASSLEN);
+	list_ptr->autopass[PASSLEN]='\0';
+	list_ptr->flags |= FLAGDOCKED;
+	if(!(list_ptr->flags & FLAGKEEPALIVE))
+	{
+		close(list_ptr->fd);
+		list_ptr->fd=DOCKEDFD;
+	}
+	return 0;
+}
 
 BUILTIN_COMMAND(cmd_quit)
 {
 	return KILLCURRENTUSER;
 }
 
+BUILTIN_COMMAND(cmd_dumpll)
+{
+	int r;
+	struct cliententry *client_ptr;
+
+	client_ptr = headclient;
+	r=sockprint(list_ptr->fd, "NOTICE AUTH :Dumping Links.\n");
+	if(r < 0)
+	{
+		return KILLCURRENTUSER;
+	}
+	while (client_ptr != NULL)
+	{
+		r=sockprint(list_ptr->fd, "NOTICE AUTH :%p<= %p => %p :(%i,%i)\n", client_ptr->prev, client_ptr, client_ptr->next, client_ptr->fd, client_ptr->sfd);
+		if(r < 0)
+		{
+			return KILLCURRENTUSER;
+		}
+		client_ptr = client_ptr->next;
+	}
+	r=sockprint(list_ptr->fd, "NOTICE AUTH :End of Linked list.\n");
+	if(r < 0)
+	{
+		return KILLCURRENTUSER;
+	}
+	
+	return 0;
+}
 
 BUILTIN_COMMAND(cmd_rawecho)
 {
@@ -461,6 +899,23 @@ BUILTIN_COMMAND(cmd_prefixrawecho)
 	}
 	if(r < 0)
 		return KILLCURRENTUSER;
+	return 0;
+}
+
+
+
+BUILTIN_COMMAND(cmd_bypass)
+{
+	int r;
+	if(pargc < 2)
+	{
+		return 0;
+	}
+	r=sockprint(list_ptr->sfd,"%s\n",pargv[1]);
+	if(r < 0)
+	{
+		return SERVERDIED;
+	}
 	return 0;
 }
 
@@ -805,8 +1260,12 @@ BUILTIN_COMMAND(cmd_vip)
 BUILTIN_COMMAND(cmd_who)
 {
 	int r;
+	int nchans;
+	char chans[128+1];
+	
+	
 	struct cliententry *client_ptr;
-	char st[10];
+	char st[11];
 
 	client_ptr = headclient;
 	r=sockprint(list_ptr->fd, "NOTICE AUTH :Listing users.\n");
@@ -816,10 +1275,27 @@ BUILTIN_COMMAND(cmd_who)
 	}
 	while (client_ptr != NULL)
 	{
-		thestat(st,10, client_ptr);
+		thestat(st,11, client_ptr);
 		if( client_ptr->flags & FLAGCONNECTED )
 		{
-			r=sockprint(list_ptr->fd, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] on server %s\n", client_ptr->fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->onserver);
+			nchans=chanlist(chans,128,client_ptr);
+			if( client_ptr->flags & FLAGDOCKED )
+			{
+				r=sockprint(list_ptr->fd, "NOTICE AUTH :(DOCKED FD %i Status: %s)[%s@%s] on server (%s) %s\n", client_ptr->sfd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);
+			}
+			else
+			{
+				r=sockprint(list_ptr->fd, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] on server (%s) %s\n", client_ptr->fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);
+			}
+			if(r < 0)
+			{
+				return KILLCURRENTUSER;
+			}
+			if(nchans)
+			{
+				r=sockprint(list_ptr->fd, "NOTICE AUTH :CHANLIST: %s\n", chans );
+			}
+			
 		}
 		else
 		{
@@ -972,7 +1448,7 @@ BUILTIN_COMMAND(cmd_addhost)
 	{
 		return 0;
 	}
-	na = malloc (sizeof (accesslist));
+	na = pmalloc (sizeof (accesslist));
 	na->type = mytoi (pargv[1]);
 	strncpy (na->addr, pargv[2], HOSTLEN);
 	na->addr[HOSTLEN]='\0';

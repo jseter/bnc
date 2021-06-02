@@ -1,3 +1,15 @@
+
+2.8.2
+(1) Coded in channel watching code for docking.
+(2) Coded a new line parsing system
+(3) Coded a new system for the client lists, maybe it will fix some bugs
+(4) implemented docking,  still very beta though  /detach password
+      /resume FD password
+(5) rewrote some of the inner workings, hope this fixed some bugs.
+(6) rewrote config file format, now uses real words (listen xxx) read
+      example.conf for details. Old format will still work.
+
+
 2.6.4
 (1) Coded my own Atoi trying to solve some weird bug where ppl would put a
       number in there conf file and get completely different results.

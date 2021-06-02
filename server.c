@@ -25,8 +25,9 @@ extern int bnclog (confetti * jr, char *logbuff);
 extern void add_access (confetti *, accesslist *);
 extern int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **pargv, char *prefix);
 extern void bnckill (int reason);
+extern int wipechans(struct cliententry *list_ptr);
 extern int remnl (char *buf, int size);
-
+extern void *pmalloc(size_t size);
 extern char *helplist[];
 extern char *helplista[]; 
 
@@ -117,6 +118,11 @@ int sockprint(int fd,const char *format,...)
   int p;
   va_list ap;
   va_start(ap,format);
+  if(fd == DOCKEDFD)
+  {
+  	return 1; 
+  }
+  
   p = vsnprintf(buffer, PACKETBUFF, format, ap);
   va_end(ap);
   p = send(fd, buffer, p, 0);
@@ -156,8 +162,8 @@ int thestat(char *buf,int len, struct cliententry *list_ptr)
 	int p,d;
 	char *st[2] = 
 	{
-		"spunback",
-		"SPUNBACK",
+		"spunbackd",
+		"SPUNBACKD",
 	};
 	d=list_ptr->flags;
 	for(p=0;st[0][p];p++)
@@ -175,6 +181,51 @@ int thestat(char *buf,int len, struct cliententry *list_ptr)
 	}
 	buf[p]='\0';
 	return p;
+}
+
+int chanlist(char *buf,int len, struct cliententry *client)
+{
+	int p,c,f;
+	char *s;
+	struct chanentry *list_ptr;
+	p=0;
+	list_ptr=client->headchan;
+	c=0;
+	memset(buf,0,len);
+	
+	while(list_ptr)
+	{
+		c++;
+		if(p>0)
+		{
+			buf[p++]=' ';
+		}
+		for(s=list_ptr->chan;*s;s++)
+		{
+			buf[p++]=*s;
+			if(p>=len)
+			{
+				break;
+			}
+		}
+		if(p<len)
+		{
+			buf[p]='\0';
+			list_ptr=list_ptr->next;
+		}
+		else
+		{
+			c=-1;
+			p--;
+			buf[p--]='\0';
+			for(f=3;f>0;f--)
+			{
+				buf[p]='.';
+			}
+			list_ptr=NULL;
+		}
+	}
+	return c;
 }
 
 /*
@@ -231,7 +282,7 @@ int
       int i = 0;
       char *st;
 
-      st = (char *) malloc( sizeof(char) * strlen(wld) + 1);
+      st = (char *) pmalloc( sizeof(char) * strlen(wld) + 1);
 
       while (*wld == '*' && *wld)
       {
@@ -269,46 +320,50 @@ int
 
 int passwordokay (char *s, char *pass)
 {
+	char *encr;
+	char salt[3];
+	char *crypt ();
 
-  char *encr;
-  char salt[3];
-  char *crypt ();
+	if (pass[0] == '+')
+	{
+		pass++;
+		
+		salt[0] = pass[0];
+		salt[1] = pass[1];
+		salt[2] = 0;
 
-  if (pass[0] == '+')
-  {
-    pass = &pass[1];
+		encr = crypt (s, salt);
+	}
+	else
+	{
+		encr = s;
+	}
 
-    salt[0] = pass[0];
-    salt[1] = pass[1];
-    salt[2] = 0;
-    encr = crypt (s, salt);
-  }
-  else
-  {
-    encr = s;
-  }
-
-  if (!strncmp (encr, pass, 10))
-    return 1;
-  else
-    return 0;
+	if (!strncmp (encr, pass, 10))
+	{
+		return 1;
+	}
+	return 0;
 }
 
-int connokay (struct sockaddr_in sa, confetti * jr)
-{
-	struct hostent *hp = gethostbyaddr ((char *) &sa.sin_addr, sizeof (sa.sin_addr), AF_INET);
 
+int connokay (struct sockaddr_in *sa, confetti * jr)
+{
+	struct hostent *hp;
 	accesslist *na;
 
-	logprint(jack, "Connection from %s", inet_ntoa (sa.sin_addr));
+	hp = gethostbyaddr ((char *) &sa->sin_addr, sizeof (struct in_addr), AF_INET);
+	logprint(jack, "Connection from %s", inet_ntoa (sa->sin_addr));
 
 	if (!jr->has_alist)
+	{
 		return 1;
+	}
 	for (na = jr->alist; na; na = na->next)
 	{
 		if (na->type == 1)
 		{
-			if (!match (inet_ntoa (sa.sin_addr), na->addr))
+			if (!match (inet_ntoa (sa->sin_addr), na->addr))
 			return 1;
 		}
 		else if (na->type == 2 && hp)
@@ -325,15 +380,34 @@ int connokay (struct sockaddr_in sa, confetti * jr)
 
 int wipeclient(struct cliententry *list_ptr)
 {
+	wipechans(list_ptr);
 	if(list_ptr->fd > -1)
 	{
 		close(list_ptr->fd);
+		list_ptr->fd=-1;
 	}
 	if(list_ptr->sfd > -1)
 	{
 		close(list_ptr->sfd);
+		list_ptr->sfd=-1;
 	}
-	free(list_ptr);
+/*	
+	if(list_ptr->prev != NULL)
+	{
+		list_ptr->prev->next=list_ptr->next;
+	}
+	else
+	{
+		headclient=list_ptr->next;
+	}
+	if(list_ptr->next != NULL)
+	{
+		list_ptr->next->prev=list_ptr->prev;
+	}
+*/
+	page_free(&list_ptr->page_client);
+	page_free(&list_ptr->page_server);
+//	free(list_ptr);
 	return 0;
 }
 
@@ -380,9 +454,12 @@ int countfds (struct cliententry *list_ptr)
 	int p;
 
 	p = 0;
-	while (list_ptr != NULL)
+	for(p=0;list_ptr;list_ptr=list_ptr->next)
 	{
-		list_ptr = list_ptr->next;
+		if(list_ptr->fd == -1)
+		{
+			continue;
+		}
 		p++;
 	}
 	return p;
@@ -593,7 +670,7 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 		}
 	}
  	f=handlepclient(list_ptr, fromwho, pargc, pargv, prefix);
-	if((list_ptr->flags & FLAGCONNECTED) && (f == 1))
+	if((list_ptr->flags & FLAGCONNECTED) && (f == FORWARDCMD))
 	{
 		f=0;
 		for(p=0;p<buflen;p++)
@@ -613,7 +690,12 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 		}
 		else
 		{
-			r = sockprint(list_ptr->fd,"%s\n",buf);
+			/* don't forward anything if its docked */
+			r=1;
+			if( !(list_ptr->flags & FLAGDOCKED))
+			{
+				r = sockprint(list_ptr->fd,"%s\n",buf);
+			}
 		}
 		if(r < 1)
 		{
@@ -625,17 +707,23 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 }
 
 
-void initclient (struct cliententry *list_ptr, fd_set * nation)
+void initclient(fd_set * nation)
 {
+	struct cliententry *list_ptr;
+	
 	highfd = s_sock;
 	FD_ZERO (nation);
 	FD_SET (s_sock, nation);
-	while (list_ptr != NULL)
+
+	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
 	{
-		FD_SET(list_ptr->fd, nation);
-		if (list_ptr->fd > highfd)
+		if(list_ptr->fd > -1)
 		{
-			highfd = list_ptr->fd;
+			FD_SET(list_ptr->fd, nation);
+			if (list_ptr->fd > highfd)
+			{
+				highfd = list_ptr->fd;
+			}
 		}
 		if(list_ptr->flags & FLAGCONNECTED)
 		{
@@ -648,21 +736,41 @@ void initclient (struct cliententry *list_ptr, fd_set * nation)
 				}
 			}	
 		}
-		list_ptr = list_ptr->next;
 	}
 }
 
 
 int scanclient (struct cliententry *list_ptr, fd_set * nation)
 {
-	int p,c,f,r;
-
-	if (FD_ISSET (list_ptr->fd, nation))
+	int p,c,f,r,m;
+	LINE *line_ptr;
+	
+	m=0;
+	if(list_ptr->fd >= 0)
+	{
+		m=(FD_ISSET (list_ptr->fd, nation));
+	}
+	if(m)
 	{
 		r = recv (list_ptr->fd, allbuf, PACKETBUFF, 0);
 		if(r <= 0)
 		{
-			return KILLCURRENTUSER;
+			if(list_ptr->flags & FLAGDOCKED)
+			{
+				if(list_ptr->sfd == -1)
+				{
+					close(list_ptr->fd);
+					list_ptr->fd = -1;
+					return KILLCURRENTUSER;
+				}
+				close(list_ptr->fd); /* wipe that dude */
+				list_ptr->fd=DOCKEDFD;
+				return 0;
+			}
+			else
+			{
+				return KILLCURRENTUSER;
+			}
 		}
 		for (p = 0; p < r; p++)
 		{
@@ -689,11 +797,15 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 					list_ptr->blen=0;
 					if(c > 0 )
 					{
+					  	page_append_line(&list_ptr->page_client,list_ptr->biff);
+
+					  /*
 						f = handleclient (list_ptr, CLIENT, c, list_ptr->biff);
 						if( f > 1)
 						{
 							return f;
 						}
+					  */
 					}
 					break;
 				}
@@ -708,10 +820,30 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 			}
 		}	
 	}
+	for(line_ptr=list_ptr->page_client.head;line_ptr;line_ptr=list_ptr->page_client.head)
+	{
+		list_ptr->page_client.head=line_ptr->next;
+		for(c=0;line_ptr->line[c];c++);
+		f=handleclient(list_ptr, CLIENT, c, line_ptr->line);
+		free(line_ptr);
+		if(f > 1)
+		{
+			return f;
+		}
+	}
+	
 	if(!(list_ptr->flags & FLAGCONNECTED))
 	{
 		return 0;
 	}
+	
+	if(list_ptr->sfd == -1)
+	{
+		list_ptr->flags &= ~FLAGCONNECTED;
+		return 0;
+	}	
+	
+	
 	
 	if(FD_ISSET (list_ptr->sfd, nation))
 	{
@@ -753,11 +885,14 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 					list_ptr->slen=0;
 					if(c > 0 )
 					{
+						page_append_line(&list_ptr->page_server,list_ptr->siff);
+/*
 						f = handleclient (list_ptr, SERVER, c, list_ptr->siff);
 						if( f > 1)
 						{
 							return f;
 						}
+*/
 					}
 					break;
 				}
@@ -771,6 +906,19 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 				}
 			}
 		}	
+		for(line_ptr=list_ptr->page_server.head;line_ptr;line_ptr=list_ptr->page_server.head)
+		{
+			list_ptr->page_server.head=line_ptr->next;
+			for(c=0;line_ptr->line[c];c++);
+			f=handleclient(list_ptr, SERVER, c, line_ptr->line);
+			free(line_ptr);
+			if(f > 1)
+			{
+				return f;
+			}
+		}
+
+		
 		/* end of new shiz */
 		
 		
@@ -785,28 +933,35 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 	return 0;
 }
 
-struct cliententry *chkclient (struct cliententry *list_ptr, fd_set * nation)
+void chkclient(fd_set * nation)
 {
 	int p,r;
+	struct cliententry *list_ptr;
 
-	while (list_ptr != NULL)
+
+	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
 	{
 		p=scanclient(list_ptr,nation);
 
 		if(p == KILLCURRENTUSER) /* self death */
 		{
-			return list_ptr;
+		
+			wipeclient(list_ptr);			
+			return;
 		}
 		if(p == SERVERDIED) /* keep alive */
 		{
+			page_free(&list_ptr->page_server);
+
 			r=sockprint(list_ptr->fd, "NOTICE AUTH :IRC quit, KeepAlive here.\n", list_ptr->nick);
 			if(r < 0)
 			{
-				return list_ptr;
+				wipeclient(list_ptr);
+				return;
 			}			
 			if(list_ptr->flags & FLAGCONNECTED)
 			{
-				if( list_ptr->sfd > -1)
+				if( list_ptr->sfd != -1)
 				{
 					close(list_ptr->sfd);
 					list_ptr->sfd=-1;
@@ -814,187 +969,146 @@ struct cliententry *chkclient (struct cliententry *list_ptr, fd_set * nation)
 				list_ptr->flags &= ~FLAGCONNECTED;
 			}
 		}
-		list_ptr = list_ptr->next;
 	}
-  	return NULL;
+  	return;
 }
 
-void doclient(struct cliententry *list_ptr, fd_set * nation)
+int addon_client(int citizen, struct sockaddr_in *nin)
 {
-	int citizen, p,r;
+	int p,r;
 	struct in_addr faddr;
-	struct cliententry *bob;
+	struct cliententry *list_ptr;
 
-	if (FD_ISSET (s_sock, nation))
+	if (jack->maxusers)
 	{
-		citizen = accept (s_sock, (struct sockaddr *) &muhsin, &sinlen);
-		if (citizen >= 0)
+		if (countfds (headclient) + 1 > jack->maxusers)
 		{
-			if (jack->maxusers)
-			{
-				if (countfds (headclient) + 1 > jack->maxusers)
-				{
-					close (citizen);
-					return;
-				}
-			}
-			p = sizeof (muhsin);
-			r=getpeername (citizen, (struct sockaddr *) &muhsin, &p);
-			if(r)
-			{
-				close(citizen);
-				return;
-			}
-			if (!connokay (muhsin, jack))
-			{
-				close (citizen);
-				return;
-			}
-			bob = (struct cliententry *) malloc( sizeof( struct cliententry ));
-			memset(bob, 0, sizeof(struct cliententry));
-			if( bob == NULL)
-			{
-				close (citizen);
-				return;
-			}
-			bob->fd = citizen;
-			bob->sfd = -1;
-			bob->prev=NULL;
-			bob->next=headclient;
-			if( headclient != NULL)
-				headclient->prev=bob;
-			headclient=bob;
-			strncpy(bob->vhost, jack->vhostdefault, HOSTLEN);
-			bob->vhost[HOSTLEN]='\0';
-			strcpy(bob->nick,"UNKNOWN");
-
-			faddr = muhsin.sin_addr;
-			strncpy (bob->fromip, gethost (&faddr), HOSTLEN);
-			bob->fromip[HOSTLEN]='\0';
-
-			if (jack->dpassf == 0)
-			{
-				bob->flags |= FLAGPASS;
-			}
-			bob->blen=0;
+			return -1;
 		}
 	}
-	/* normal connection stuff */
-	bob = chkclient (list_ptr, nation);
-	if(bob == NULL)
-		return;
 
-	if(bob->prev == NULL)
-		headclient=bob->next;
-	else
-		bob->prev->next=bob->next;
-
-	wipeclient(bob);	
-		
-}
-
-
-int findbad(struct cliententry *list_ptr, fd_set * nation)
-{
-	int p;
-
-	struct timeval thearf;
-	thearf.tv_sec=0;
-	thearf.tv_usec=0;
-	while (list_ptr != NULL)
+	p = sizeof(struct sockaddr_in);
+	r=getpeername (citizen, (struct sockaddr *)nin, &p);
+	if(r)
 	{
-		FD_ZERO(nation);
-		FD_SET(list_ptr->fd, nation);
-		
-		if((p=select(list_ptr->fd+1, nation, (fd_set *) 0, (fd_set *) 0, &thearf )) < 0)
-		{
-			if(errno == EBADF)
-			{ /* this is the bad boy. */
-				if(list_ptr->prev == NULL)
-					headclient=list_ptr->next;
-				else
-					list_ptr->prev->next=list_ptr->next;
-					
-				wipeclient(list_ptr);
-				return 1;
-			}
-		
-		}
-		
-		if(list_ptr->flags & FLAGCONNECTED)
-		{
-			if( list_ptr->sfd > -1)
-			{
-				FD_ZERO(nation);
-				FD_SET(list_ptr->sfd, nation);
-				if((p=select(list_ptr->fd+1, nation, (fd_set *) 0, (fd_set *) 0, &thearf)) < 0)
-				{
-					if(errno == EBADF)
-					{ /* this is the bad boy. */
-						close(list_ptr->sfd);
-						list_ptr->sfd=-1;
-						return 1;
-					}
-				}
-			}	
-		}
-		list_ptr = list_ptr->next;
+		return -1;
 	}
+	if (!connokay (nin, jack))
+	{
+		return -1;
+	}
+
+	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
+	{
+		if((list_ptr->fd == -1) && (list_ptr->sfd == -1))
+		{
+			break;
+		}
+	}
+
+	if(list_ptr == NULL)
+	{
+		list_ptr = (struct cliententry *) pmalloc( sizeof( struct cliententry ));
+		if( list_ptr == NULL)
+		{
+			return -1;
+		}
+
+		memset(list_ptr, 0, sizeof(struct cliententry));
+		list_ptr->prev=NULL;
+		list_ptr->next=headclient;
+
+		if( headclient != NULL)
+		{
+			headclient->prev=list_ptr;
+		}
+		headclient=list_ptr;	
+	}
+			
+	list_ptr->fd = citizen;
+	list_ptr->sfd = -1;
+		
+	list_ptr->flags=0;
+	list_ptr->headchan=NULL;
+		
+	strncpy(list_ptr->vhost, jack->vhostdefault, HOSTLEN);
+	list_ptr->vhost[HOSTLEN]='\0';
+	strcpy(list_ptr->nick,"UNKNOWN");
+	faddr = nin->sin_addr;
+	strncpy (list_ptr->fromip, gethost (&faddr), HOSTLEN);
+	list_ptr->fromip[HOSTLEN]='\0';
+
+	if (jack->dpassf == 0)
+	{
+		list_ptr->flags |= FLAGPASS;
+	}
+	list_ptr->blen=0;
+		
 	return 0;
 }
 
+
 int initproxy (confetti * jr)
 {
-  int f;
+	int f;
 
-  s_sock = socket (AF_INET, SOCK_STREAM, 0);
-  if (s_sock < 0)
-  {
-    return SOCKERR;
-  }
-  memset (&muhsin, 0, sizeof (struct sockaddr_in));
+	s_sock = socket (AF_INET, SOCK_STREAM, 0);
+	if (s_sock < 0)
+	{
+		return SOCKERR;
+	}
+	memset (&muhsin, 0, sizeof (struct sockaddr_in));
 
-  muhsin.sin_family = AF_INET;
-  muhsin.sin_port = htons (jr->dport);
-  muhsin.sin_addr.s_addr = INADDR_ANY;
-  f = 1;
-  setsockopt (s_sock, SOL_SOCKET, SO_REUSEADDR, &f, sizeof (f));
+	muhsin.sin_family = AF_INET;
+	muhsin.sin_port = htons (jr->dport);
+	muhsin.sin_addr.s_addr = INADDR_ANY;
+	f = 1;
+	setsockopt (s_sock, SOL_SOCKET, SO_REUSEADDR, &f, sizeof (f));
 
-  if (bind (s_sock, (struct sockaddr *) &muhsin, sizeof (struct sockaddr_in)) < 0)
-  {
-    close (s_sock);
-    return BINDERR;
-  }
-  if (listen (s_sock, 10) < 0)
-  {
-    return LISTENERR;
-  }
-  return 0;
+	if (bind (s_sock, (struct sockaddr *) &muhsin, sizeof (struct sockaddr_in)) < 0)
+	{
+		close (s_sock);
+		return BINDERR;
+	}
+	if (listen (s_sock, 10) < 0)
+	{
+		return LISTENERR;
+	}
+
+	return 0;
 }
 
 int ircproxy (confetti * jr)
 {
-  int p;
-  fd_set nation;
+	int p,r,nfd;
+	struct sockaddr_in nin;
+	int ninlen;
+	fd_set nation;
 
-  jack = jr;
-  ENDLESSLOOP
-  {
-    initclient(headclient, &nation);
-    if ((p = select (highfd + 1, &nation, (fd_set *) 0, (fd_set *) 0, NULL)) < 0)
-    {
-    	if(errno == EBADF)
-    	{
-    		p=findbad(headclient,&nation);
-    	}
-    	if(errno == ENOMEM)
-    	{
-		bnckill (SELECTERR);
+	jack = jr;
+	ENDLESSLOOP
+	{
+		initclient(&nation);
+		if ((p = select (highfd + 1, &nation, (fd_set *) 0, (fd_set *) 0, NULL)) < 0)
+		{
+			if(errno == ENOMEM)
+			{
+				bnckill (SELECTERR);
+			}
+			bnckill(FATALITY);
+		}
+		if (FD_ISSET (s_sock, &nation))
+		{
+			nfd = accept (s_sock, (struct sockaddr *) &nin, &ninlen);
+			r=addon_client(nfd,&nin);
+			if(r == -1)
+			{
+				close(nfd);
+			}
+		}
+		chkclient(&nation);
 	}
-    }
-    doclient (headclient, &nation);
-  }
-  return 0;
+	return 0;
 }
 
 
