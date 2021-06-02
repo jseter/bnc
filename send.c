@@ -175,7 +175,7 @@ reschar:
 				sign = '\0';
 				src = buf;
 				eos = src + 1;
-				*src = (char)va_arg(ap, int);
+				*src = va_arg(ap, char);
 				goto writeout;
 			case 's':
 				src = va_arg(ap, char *);
@@ -211,7 +211,7 @@ reschar:
 				goto nosign;
 nosign:
 				ulval = flags & flaglongint ? va_arg(ap, long)
-				: flags & flagshortint ? (long)(short)va_arg(ap, int)
+				: flags & flagshortint ? (long)(short)va_arg(ap,short)
 				: (long)va_arg(ap,int) ;
 				
 				goto number;
@@ -225,7 +225,7 @@ nosign:
 			case 'd':
 			case 'i':
 				ulval = flags & flaglongint ? va_arg(ap, long)
-				: flags & flagshortint ? (long)(short)va_arg(ap, int)
+				: flags & flagshortint ? (long)(short)va_arg(ap,short)
 				: (long)va_arg(ap,int) ;
 				
 				if((long)ulval < 0)
