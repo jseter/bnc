@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <signal.h>
 #include <ctype.h>
@@ -23,6 +24,11 @@ unsigned int req = 0;
 extern void *pmalloc(size_t size);
 #define CONFCMD(x) int x(confetti * jr, int pargc, char **pargv)
 CONFCMD(conf_listen);
+CONFCMD(conf_listenex);
+#ifdef HAVE_SSL
+CONFCMD(conf_publickey);
+CONFCMD(conf_privatekey);
+#endif
 CONFCMD(gen_c);
 CONFCMD(gen_d);
 CONFCMD(gen_p);
@@ -58,7 +64,12 @@ struct confcmd confcmdlist[] =
 	{"A",gen_a},
 	{"B",gen_b},
 	{"I",gen_i},
-	{"LISTEN",conf_listen},
+	{"LISTEN", conf_listen},
+	{"LISTENEX", conf_listenex},
+#ifdef HAVE_SSL
+	{ "PUBLICKEY", conf_publickey},
+	{ "PRIVATEKEY", conf_privatekey},
+#endif
 	{"PASSWORD",conf_password},
 	{"ADMINPASS",gen_s},
 	{"ALLOW",conf_allow},
@@ -111,6 +122,124 @@ CONFCMD(conf_password)
 	strncpy (jr->dpass, pargv[1], PASSLEN);
 	jr->dpass[PASSLEN]='\0';
 	jr->dpassf = 1;	
+	return 0;
+}
+
+CONFCMD(conf_listenex)
+{
+	int idx;
+	char *opt;
+	unsigned int flags;
+	int f_argc;
+	char *f_argv[1];
+	
+	char *localhost;
+	char *maxusers;
+	char *port;
+	char *strend;
+	
+	unsigned long ulport;
+
+	localhost = NULL;
+	maxusers  = NULL;
+
+	flags = 0;
+	f_argc = 0;
+	
+	idx = 1;
+	while(idx < pargc)
+	{
+		opt = pargv[idx++];
+		
+		if(*opt == '-')
+		{
+			++opt;
+			if(*opt == '-')
+			{
+				++opt;
+				// long options
+				if( strcasecmp(opt, "localhost") == 0)
+				{
+					if(idx >= pargc)
+					{
+						fprintf(stderr, "--localhost requires argument\n");
+						return -1;
+					}
+					localhost = pargv[idx++];
+				}
+				else if( strcasecmp(opt, "limit") == 0)
+				{
+					if(idx >= pargc)
+					{
+						fprintf(stderr, "--limit requires argument\n");
+						return -1;
+					}
+					maxusers = pargv[idx++];
+				}
+				else if( strcasecmp(opt, "ipv6") == 0)
+				{
+					flags |= USE_IPV6;
+				}
+#ifdef HAVE_SSL
+				else if(strcasecmp(opt, "ssl") == 0)
+				{
+					flags |= USE_SSL;
+				}
+#endif
+				else
+				{
+					fprintf(stderr, "Unknown long options --%s\n", opt);
+					return -1;
+				}
+			}
+			else
+			{
+				// short options
+			}
+		}
+		else
+		{
+			if(f_argc >= 1)
+				break;
+			f_argv[f_argc++] = opt;
+		}
+	}
+	
+	if(f_argc < 1)
+		return -1;
+	
+	port = f_argv[0];
+
+	if(localhost)
+	{
+		strncpy(jr->dhost, localhost, HOSTLEN);
+		jr->dhost[HOSTLEN] = 0;
+	}
+
+	if(maxusers)
+	{
+		unsigned long t;
+		
+		t = strtoul(maxusers, &strend, 0);
+		if(t > UINT_MAX || strend == maxusers)
+		{
+			fprintf(stderr, "Invalid maxusers argument\n");
+			return -1;
+		}
+		jr->maxusers = t;
+	}
+
+	ulport = strtoul(port, &strend, 0);
+	if(ulport > USHRT_MAX || strend == port)
+	{
+		fprintf(stderr, "Invalid port %lu\n", ulport);
+		return -1;
+	}
+	jr->dport = ulport;
+
+	jr->optflags |= flags;
+
+	req |= 1;
 	return 0;
 }
 
@@ -190,6 +319,32 @@ CONFCMD(conf_listen)
 	
 	return 0;
 }
+
+#ifdef HAVE_SSL
+CONFCMD(conf_publickey)
+{
+	if (pargc < 2)
+	{
+		return 0;
+	}
+	strncpy (jr->public_cert_file, pargv[1], FILELEN);
+	jr->public_cert_file[FILELEN]='\0';
+
+	return 0;
+}
+CONFCMD(conf_privatekey)
+{
+	if (pargc < 2)
+	{
+		return 0;
+	}
+	strncpy (jr->private_cert_file, pargv[1], FILELEN);
+	jr->private_cert_file[FILELEN]='\0';
+	return 0;
+}
+#endif
+
+
 
 CONFCMD(conf_allow)
 {
@@ -426,6 +581,10 @@ int loadconf (char *fname, confetti * jr)
 	int err;
 	int line;
 
+	// set some defaults
+	jr->maxusers = 0;
+	jr->optflags = 0;
+	
 	req = 0;
 	if ((src = fopen (fname, "rb")) == NULL)
 	{

@@ -1,3 +1,10 @@
+2.9.4
+(1) SSL support can now be used incoming.
+(2) Added three new configuration entries to handle new features:
+    listenex [--ssl][--limit <maxusers>][--localhost <hostname>] <port>
+    privatekey <filename>
+    publickey <filename>
+
 2.9.3
 (1) SECURITY FIX: FD_SETSIZE overflow DOS
 (2) SSL support can now be used if configured with --with-ssl

@@ -4,7 +4,7 @@ MYPID=$$
 TMPFILE=.bnc$MYPID.tmp
 RSLFILE=.bnc$MYPID.rsl
 VHTFILE=.bnc$MYPID.vht
-BSVERSION="0.6 for BNC2.9.0"
+BSVERSION="0.7 for BNC2.9.4"
 SAVEFILE=./bnc.conf
 
 bsclean()
@@ -16,12 +16,10 @@ bsclean()
 saveit()
 {
 echo "Writing your configuration to $SAVEFILE"
-
-if [ -z $BNCHOST ]
+LISTENEXOPTS=
+if [ ! -z $BNCHOST ]
 then
-BNCHOST="$BNCPORT"
-else
-BNCHOST="$BNCHOST:$BNCPORT"
+LISTENEXOPTS="$LISTENEXOPTS --localhost $BNCHOST"
 fi
 
 if [ -z $BNCPASS ]
@@ -31,15 +29,23 @@ else
 usepass="password $BNCPASS"
 fi
 
+if [ $MAXUSERS -ne 0 ]
+then
+LISTENEXOPTS="$LISTENEXOPTS --limit $MAXUSERS"
+fi
 cat << EOF > $TMPFILE
 #!/home/myhome/bnc
 # BNCSetup $BSVERSION by IceWizard and pharos
 # automaticly generated configuration file.
 # <REQUIRED>
 # listen <port> [maxusers]	Port to listen for connections on
+# Or..
+# listenex [--ssl] [--limit <maxusers>] [--localhost <hostname>] <port>
 # adminpass <password>		Password for Supervisor Access	
 #
 # [Optional]
+# privatekey <filename>       Required if SSL server is used
+# publickey <filename>        Required if SSL server is used
 # password <password>		Password required for general connection (recommended)
 # allow <address> [address ...]	list of ip/dns's that can use the bnc
 # vhost <address> [address ...] Other Vhosts That Can Be Used (display only)
@@ -51,7 +57,7 @@ cat << EOF > $TMPFILE
 # EXAMPLE CONFIG - CHANGE THIS:
 # if your pass starts with + it is encrypted, if not it is a normal pass
 #
-listen $BNCHOST $MAXUSERS
+listenex $LISTENEXOPTS $BNCPORT 
 adminpass $SUPERPASS
 $usepass
 EOF

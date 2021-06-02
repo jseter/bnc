@@ -95,6 +95,10 @@ struct deathwish bncerr[] =
   { SELECTERR, "Select call returned in error" },
   { DOWNER, "Shut down by Supervisor" },
   { KILLED, "I wuz shot down!" },
+#ifdef HAVE_SSL
+  { PUBLICCERTERR, "There is an issue with the public certificate"},
+  { PRIVATECERTERR, "There is an issue with the private certificate"},
+#endif
   { 0, "Died for an unknown reason" }
 };
 

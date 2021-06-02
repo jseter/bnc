@@ -1,4 +1,4 @@
-#define VERSION "v2.9.3"
+#define VERSION "v2.9.4"
 #define PACKETBUFF 1024
 
 #define HIGHOVL 16384
@@ -47,7 +47,17 @@ struct chanentry
 #define FLAGDRAIN 1
 
 #ifdef HAVE_SSL
-#define USE_SSL 1
+#define USE_SSL  1
+#endif
+
+#define USE_IPV6 2
+
+
+#ifdef HAVE_SSL
+#define REPEAT_NONE   0
+#define REPEAT_READ   1
+#define REPEAT_WRITE  2
+#define REPEAT_ACCEPT 3
 #endif
 
 struct lsock
@@ -55,6 +65,7 @@ struct lsock
 	int fd;
 #ifdef HAVE_SSL
 	SSL *ssl;
+	int repmode;
 #endif
 	int flags;
 	struct sbuf sendq;
@@ -125,6 +136,7 @@ typedef struct
 	unsigned int dport;
 	unsigned int maxusers;
 	unsigned int cport;
+	unsigned int optflags;
 	
 	int dpassf;
 	int identwd;
@@ -142,8 +154,12 @@ typedef struct
 	char vhostdefault[HOSTLEN+1];
 	char spass[PASSLEN+1];
 	char dpass[PASSLEN+1];
-	char pidfile[FILELEN];
+	char pidfile[FILELEN+1];
 	char motdf[FILELEN+1];
+#ifdef HAVE_SSL
+	char private_cert_file[FILELEN+1];
+	char public_cert_file[FILELEN+1];
+#endif
 } confetti;
 
 #define CONFNOTFOUND 1
@@ -157,3 +173,7 @@ typedef struct
 #define SELECTERR 8
 #define KILLED 9
 #define DOWNER 10
+#ifdef HAVE_SSL
+#define PUBLICCERTERR 11
+#define PRIVATECERTERR 12
+#endif

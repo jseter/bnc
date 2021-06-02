@@ -78,7 +78,8 @@ int sinlen;
 unsigned char allbuf[PACKETBUFF+1];
 unsigned char buffer[PACKETBUFF+1];
 #ifdef HAVE_SSL
-SSL_CTX *SSLcontext;
+SSL_CTX *SSL_CTX_client;
+SSL_CTX *SSL_CTX_server;
 #endif
 
 
@@ -344,7 +345,24 @@ int lsock_read(struct lsock *ls, void *buf, size_t len)
 {
 #ifdef HAVE_SSL
 	if(ls->ssl)
-		return SSL_read(ls->ssl, buf, len);
+	{
+		int res;
+		res = SSL_read(ls->ssl, buf, len);
+		if(res < 0)
+		{
+			int SSLerror;
+			SSLerror = SSL_get_error(ls->ssl, res);
+			if(SSLerror == SSL_ERROR_WANT_READ || SSLerror == SSL_ERROR_WANT_WRITE)
+			{
+				errno = EAGAIN;
+				ls->repmode = REPEAT_READ;
+				return -1;
+			}
+			errno = 0;
+			return -1;
+		}
+		return res;
+	}
 #endif
 	return recv(ls->fd, buf, len, 0);
 }
@@ -353,7 +371,24 @@ int lsock_write(struct lsock *ls, void *buf, size_t len)
 {
 #ifdef HAVE_SSL
 	if(ls->ssl)
-		return SSL_write(ls->ssl, buf, len);
+	{
+		int res;
+		res = SSL_write(ls->ssl, buf, len);
+		if(res < 0)
+		{
+			int SSLerror;
+			SSLerror = SSL_get_error(ls->ssl, res);
+			if(SSLerror == SSL_ERROR_WANT_READ || SSLerror == SSL_ERROR_WANT_WRITE)
+			{
+				errno = EAGAIN;
+				ls->repmode = REPEAT_WRITE;
+				return -1;
+			}
+			errno = 0;
+			return -1;
+		}
+		return res;
+	}
 #endif
 	return send(ls->fd, buf, len, 0);
 }
@@ -366,7 +401,6 @@ int send_queued(struct lsock *ls)
 	int length;
 	char *msg;
 
-	
 	while(sbuf_getlength(&ls->sendq) > 0)
 	{
 		msg = sbuf_pagemap(&ls->sendq, &length);
@@ -405,6 +439,18 @@ int wipeclient(struct cliententry *cptr)
 		close(cptr->srv.fd);
 		cptr->srv.fd=-1;
 	}
+#ifdef HAVE_SSL
+	if(cptr->loc.ssl)
+	{
+		SSL_free(cptr->loc.ssl);
+		cptr->loc.ssl = NULL;
+	}
+	if(cptr->srv.ssl)
+	{
+		SSL_free(cptr->srv.ssl);
+		cptr->srv.ssl = NULL;
+	}
+#endif
 
 	sbuf_clear(&cptr->loc.sendq);
 	sbuf_clear(&cptr->loc.recvq);
@@ -767,7 +813,7 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 	cptr->srv.ssl = NULL;
 	if(cflags & USE_SSL)
 	{
-		cptr->srv.ssl = SSL_new(SSLcontext);
+		cptr->srv.ssl = SSL_new(SSL_CTX_client);
 		if(cptr->srv.ssl == NULL)
 		{
 			close(fd);
@@ -1209,6 +1255,9 @@ done_reof:
 
 void initclient(struct selectfds *fds)
 {
+#ifdef HAVE_SSL
+	int SSLerror;
+#endif
 	struct cliententry *cptr;
 	int length;
 		
@@ -1217,7 +1266,18 @@ void initclient(struct selectfds *fds)
 		/* handle write set first */
 		if(cptr->loc.fd > -1)
 		{
+#ifdef HAVE_SSL
+			if(cptr->loc.ssl)
+			{
+				SSLerror = SSL_get_error(cptr->loc.ssl, 0);
+			}
+			else
+				SSLerror = 0;
+			if( (length = sbuf_getlength(&cptr->loc.sendq))
+			|| SSLerror == SSL_ERROR_WANT_WRITE)
+#else
 			if((length = sbuf_getlength(&cptr->loc.sendq)))
+#endif
 			{
 				if(length > HIGHOVL)
 				{
@@ -1278,6 +1338,27 @@ int scanclient (struct cliententry *cptr, struct selectfds *fds)
 	&& cptr->loc.fd < fds->fd_setsize
 	&& FD_ISSET(cptr->loc.fd, fds->rfds))
 	{
+#ifdef HAVE_SSL
+		if(cptr->loc.repmode == REPEAT_ACCEPT)
+		{
+			res = SSL_accept(cptr->loc.ssl);
+			logprint(jack, "SSL_accept %d\n", res);
+			if(res <= 0)
+			{
+				int SSLerror;
+				SSLerror = SSL_get_error(cptr->loc.ssl, res);
+				logprint(jack, "SSL_get_error %d %d\n", res, SSLerror);
+
+				if(!(SSLerror == SSL_ERROR_WANT_READ || SSLerror == SSL_ERROR_WANT_WRITE))
+				{
+					close(cptr->loc.fd);
+					cptr->loc.fd = -1;
+					return KILLCURRENTUSER;
+				}			
+			}		
+		}
+#endif
+
 		res = lsock_read(&cptr->loc, allbuf, PACKETBUFF);
 		if(res == -1)
 		{
@@ -1446,10 +1527,13 @@ han_err:
 
 int addon_client(int citizen, struct sockaddr_in *nin)
 {
-	int p,r;
+	int res;
+	int ninlen;
 	struct in_addr faddr;
 	struct cliententry *cptr;
 
+
+	setnonblock(citizen);
 	if (jack->maxusers)
 	{
 		if (countfds (headclient) + 1 > jack->maxusers)
@@ -1458,9 +1542,9 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 		}
 	}
 
-	p = sizeof(struct sockaddr_in);
-	r=getpeername (citizen, (struct sockaddr *)nin, &p);
-	if(r)
+	ninlen = sizeof(struct sockaddr_in);
+	res=getpeername (citizen, (struct sockaddr *)nin, &ninlen);
+	if(res)
 	{
 		return -1;
 	}
@@ -1468,6 +1552,7 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 	{
 		return -1;
 	}
+
 
 	for(cptr=headclient;cptr;cptr=cptr->next)
 	{
@@ -1516,10 +1601,40 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 	sbuf_claim(&cptr->srv.recvq);
 	sbuf_claim(&cptr->srv.sendq);
 //	cptr->blen=0;
+
+#ifdef USE_SSL
+	cptr->srv.ssl = NULL;
+	cptr->loc.ssl = NULL;
+	if(jack->optflags & USE_SSL)
+	{
+		cptr->loc.ssl = SSL_new(SSL_CTX_server);
+		if(cptr->loc.ssl == NULL)
+		{
+			wipeclient(cptr);
+			return 0;
+		}
+		SSL_set_fd(cptr->loc.ssl, citizen);
+		
+		res = SSL_accept(cptr->loc.ssl);
+		logprint(jack, "SSL_accept %d\n", res);
+		if(res <= 0)
+		{
+			int SSLerror;
+			SSLerror = SSL_get_error(cptr->loc.ssl, res);
+			logprint(jack, "SSL_get_error %d %d\n", res, SSLerror);
+			if(!(SSLerror == SSL_ERROR_WANT_READ || SSLerror == SSL_ERROR_WANT_WRITE))
+			{
+				SSL_free(cptr->srv.ssl);
+				wipeclient(cptr);
+				return 0;
+			}			
+		}
+	}
+#endif
+
 		
 	return 0;
 }
-
 
 int initproxy (confetti * jr)
 {
@@ -1536,7 +1651,44 @@ int initproxy (confetti * jr)
 	SSLeay_add_ssl_algorithms();
 	SSL_load_error_strings();
 	ERR_load_crypto_strings();
-	SSLcontext = SSL_CTX_new(SSLv23_client_method());
+	SSL_CTX_client = SSL_CTX_new(SSLv23_client_method());
+	if(SSL_CTX_client == NULL)
+	{
+		logprint(jr, "Failed to create client context\n");
+		return FATALITY;
+	}
+
+	SSL_CTX_server = SSL_CTX_new(SSLv23_server_method());
+	if(SSL_CTX_client == NULL)
+	{
+		logprint(jr, "Failed to create server context\n");
+		return FATALITY;
+	}
+
+	if(*jr->public_cert_file)
+	{
+		res = SSL_CTX_use_certificate_file(SSL_CTX_server, jr->public_cert_file, SSL_FILETYPE_PEM);
+		if(res <= 0)
+		{
+			logprint(jr, "Failed to initilize SSL Certificate File \"%s\"\n", jr->public_cert_file);
+			return PUBLICCERTERR;
+		}
+	}
+	if(*jr->private_cert_file)
+	{
+		res = SSL_CTX_use_PrivateKey_file(SSL_CTX_server, jr->private_cert_file, SSL_FILETYPE_PEM);
+		if(res <= 0)
+		{
+			logprint(jr, "Failed to use Private Certificate\n");
+			return PRIVATECERTERR;
+		}
+		res = SSL_CTX_check_private_key(SSL_CTX_server);
+		if(res == 0)
+		{
+			logprint(jr, "Server certificate does not match Server key\n");
+			return PRIVATECERTERR;
+		}
+	}
 #endif
 
 

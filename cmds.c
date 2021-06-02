@@ -415,7 +415,7 @@ int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **parg
 			}
 		}
 		tprintf(&cptr->loc, "NOTICE AUTH :Level two, lets connect to something real now\n");
-		tprintf(&cptr->loc, "NOTICE AUTH :type /quote conn [server] <port> <pass> to connect\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :type /quote conn [-s] <server> [port] [pass] to connect\n");
 
 		list_docks(cptr);
 
