@@ -1,0 +1,80 @@
+2.6.2
+(1) Fixed delinking bug that was bouncing cpu usage to 100% (ick)
+(2) made bnc able to handle commands, while on irc.
+(3) cleanup, memory reductions
+(4) added BMSG as a test level command, don't expect much from it at this
+      stage
+
+2.6.0
+(1) Added more verbose /quote help
+(2) Changed MAIN, now can be used to bypass PASS if your superpass is
+      correct.
+(3) Motd is now only showed when user is fully connected, and supervisors
+      don't have to see it.
+(4) Help system no longer shows admin commands, unless your connected as a
+      supervisor
+(5) DIE and BDIE bug fixes.
+(6) Changed socket and log printing system.  replaced a log point that was
+      not working correctly.
+(7) Changed handlers for socket data, reducing structure handling code.
+(8) Fixed a lot of potential string based overflows.  Reduced memory
+      requirements for users.
+(9) Changed handlers for pre-connected commands, code speedup and beginnings
+      for planned future expansions.
+(10) Changed configure parts, increasing portability?
+(11) Fixed up the autocon feature, now works when only PASS:SERVER 
+(12) Added KEEPALIVE to command list, returns you to bnc when an irc server
+       closes you.
+(13) Changed BWHO status routine.
+(14) Changed password parser, recoded autoconn routines, removed autoconn
+       memory wasters from the client.
+(15) Recoded main parser, more effected USER handler, reduced memory
+       requirements for USER in the process.
+(16) Updated my e-mail address everywhere I see it. Don't you hate how hard
+      it is to hold the same e-mail for a long time :/
+2.4.8
+(1) Fixed a potential buffer overflow
+(2) Reduced memory requirements in the process of removing the overflow :)
+    Thanks go to barubary for helping me plan a replacement fifo system.
+(3) Added partially connected listing to BWHO
+(4) Added killing for partially connected ppl with BKILL
+(5) Added QUIT command during connection phase
+(6) Fixed a little bug in ./bncsetup
+
+2.4.6
+(1) Recoded encryption, if pass starts with + then it is encrypted, if not
+      then it is plaintext.
+(2) Added/recoded bncsetup dialog based script, for ease of .conf creation
+(3) Made /quote BWHO show a little bit more info about who is connected
+(4) Changed a few prints to help logging, exits are now logged.
+(5) Added motd support
+(6) Added /quote HELP
+(7) Added /quote IDENT to let you change your ident if you have identwd.
+
+2.4.4
+(1) New readme file, made example.conf easier to understand
+(2) Fixed that annoying Bind error thing when bnc is killed.
+(3) Moved some large varibles out of stack space for speed and securety.
+(4) Added IP allow lists, to keep out unwanted users (conf file 'A' line)
+      Thanks to White Dragon for this
+(5) Added encrypted passwords in config file.  Thanks again White Dragon
+(6) Added dynamic Idents on servers that run Identwd. enabled by putting
+      W:1 inside config file.  Thanks again White Dragon (gee starting to
+      sound repetative) Also note identwd is coded by White Dragon.
+
+2.4.3
+(1) Fixed bug that cropped up in mirc hanging on a /server bnc port pass
+(2) Fixed all the bugs that were hiding behind the bug above, which unveiled
+      crashing problems when connecting to an irc server.
+(3) Made a ./configure script to help portability, now compiles just fine
+      on sunos, BSD and linux.  Haven't tested it on AIX, please if somebody
+      compiles it on AIX, drop me a word.
+2.4.2:
+(1) Fixed various problems with Vhosts.
+(2) Fixed unusual crash bug.
+(3) Added commands VDF and VN.
+      VDF switches Vhost back to the config files default Vhost.
+      VN  switches the Vhost to the systems default bypassing config file.
+(4) Added more verbose output to VIP.
+(5) Secured up printed data with absolute sizes instead of wasting cpu doing 
+      a second size compare.

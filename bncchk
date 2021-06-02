@@ -1,0 +1,34 @@
+#!/bin/sh
+BNCBIN=bnc
+BNCPIDFILE=pid.bnc
+BNCPATH=/home/bnc
+
+
+
+
+# Below here should be fine and left alone
+
+
+
+
+cd $BNCPATH
+if test -r $BNCPATH/$BNCPIDFILE; then
+     BNCPID=$(cat $BNCPATH/$BNCPIDFILE)
+     if $(kill -CHLD $BNCPID >/dev/null 2>&1)
+     then
+     # lucky for us BNC is still up
+        exit 0
+     fi
+     echo ""
+     echo "stale pid file (erasing it)"
+     rm -f $BNCPATH/$BNCPIDFILE
+fi
+echo ""
+echo "BNC is dead........restarting BNC"
+echo ""
+if test -x $BNCBIN ;then
+   $BNCPATH/$BNCBIN
+   exit 0
+fi
+echo "could not reload"
+  

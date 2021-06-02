@@ -1,360 +1,223 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <signal.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-extern h_errno;
 
-int pt,mu,dp,cu,po;
-char ps[20];
+#ifdef HAVE_SYS_TIME_H
+#	include <sys/time.h>
+#	ifdef TIME_WITH_SYS_TIME
+#		include <time.h>
+#	endif
+#else
+#	include <time.h>
+#endif
 
-void
-child_killer(int s)
+#include <unistd.h>
+#include "common.h"
+
+#ifndef VERSION
+#define VERSION "v?.?.?"
+#endif
+
+
+char *myself;
+
+confetti bncconf;
+char logbuf[PACKETBUFF];
+int foreman;
+
+extern int logprint(confetti *jr,const char *format,...);
+extern int loadconf (char *fname, confetti * jr);
+extern int ircproxy (confetti * jr);
+extern int initproxy (confetti * jr);
+
+extern char buffer[];
+
+
+int bnclog (confetti * jr, char *logbuff)
 {
-        wait(NULL);
-        cu--;
-        signal(SIGCHLD, child_killer);
-}
+  static long tata;
+  int p;
+  char tmpa[40];
 
-
-
-int
-do_connect(char *hostname, u_short port)
-{
-	int s;
-	struct hostent *he;
-	struct sockaddr_in sin;
-
-	memset(&sin, 0, sizeof(struct sockaddr_in));
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
-	sin.sin_addr.s_addr = inet_addr(hostname);
-	if(sin.sin_addr.s_addr == -1)
+  if (jr->logf != 1)
+    return 0;
+  tata = time ((long *) 0);
+  snprintf (tmpa, 40, "%s", ctime (&tata));
+  for (p = 0; p < 40; p++)
+  {
+    switch (tmpa[p])
+    {
+      case '\n':
+      case '\r':
+      case '\0':
 	{
-		he = gethostbyname(hostname);
-		if(!he)
-			return -1;
-		memcpy(&sin.sin_addr, he->h_addr, he->h_length);
+	  tmpa[p] = '\0';
+	  break;
 	}
-	s = socket(AF_INET, SOCK_STREAM, 0);
-	if(s < 0)
-		return -2;
-	if(connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-	{
-		close(s);
-		return -2;
-	}
-	return s;
-}
-
-void
-server(int s)
- {
-	int sock_c=-1;
-	int maxfd = s+1;
-	char buffer[1024];
-	char user[1024];
-	char nick[100];
-	char tm[2];
-	int u,n,p,up;
-	fd_set rset;
-	u_short myport;
-	char *cmd, *server, *port,*nck,*pass,*spass;
-	char myserver[1024];
-	char spast[30];
-	strcpy(tm," ");
-	u=1;
-	n=1;
-	p=0;
-	if(po)
-	  p=1;
-	while((u+n+p)&&3){
-
-		memset(buffer,0,1023);
-		while(tm[0]!='\n'||strlen(buffer)<=0){
-			memset(tm,0,2);
-			if(read(s,tm,1) <= 0){
-				close(s);
-				return;
-			}
-			strncat(buffer,tm,1);		
-		}
-		if(!strncasecmp(buffer, "USER ", 5)){
-			strncpy(user, buffer,1023);
-			u=0;
-		}
-		else
-		if(!strncasecmp(buffer, "NICK ", 5)){
-			strncpy(nick,buffer,1023);
-			nck=NULL;
-			strtok(nick," ");
-			nck=strtok(NULL," \n\r");
-			if(nck)
-			  n=0;
-			if(p=1){
-				sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :You need to say /quote PASS <password>\n",nck);
-				write(s, buffer, strlen(buffer));
-			}
-		}
-		else                                       
-	        if(!strncasecmp(buffer, "PASS ", 5)){
-	                strncpy(myserver,buffer,25);
-	                pass=NULL;
-	                strtok(myserver," ");
-	                pass=strtok(NULL," \n\r");
-	                if(pass){
-	                	if(!strncmp(pass,ps,strlen(ps)))
-	                	  p=0;
-	                }
-	        }
-        }
-        sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :Level two, lets connect to something real now\n",nck);
-	write(s, buffer, strlen(buffer));
-        sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :type /quote conn [server] <port> <pass> to connect\n",nck);
-	write(s, buffer, strlen(buffer));
-	while(1)
-	{
-		FD_ZERO(&rset);
-		FD_SET(s, &rset);
-		if(sock_c >= 0)
-			FD_SET(sock_c, &rset);
-		if(sock_c > s)
-			maxfd = sock_c + 1;
-		else
-			maxfd = s + 1;
-		select(maxfd, &rset, NULL, NULL, NULL);
-		memset(buffer, 0, 1024);
-		if(FD_ISSET(s, &rset))
-		{
-			if(read(s, buffer, 1023) <= 0)
-			{
-				close(s);
-				close(sock_c);
-				return;
-			}
-			if(sock_c >= 0)
-			{
-				write(sock_c, buffer, strlen(buffer));
-			}
-			else
-			{
-				cmd = NULL;
-				server = NULL;
-				port = NULL;
-				spass = NULL;
-				up = 0;
-				cmd = strtok(buffer, " ");
-				if(!cmd)
-					continue;
-				if(strcasecmp(cmd, "conn"))
-					continue;
-				server = strtok(NULL, " \n\r");
-				if(!server)
-					continue;
-				strncpy(myserver, server,1023);
-				port = strtok(NULL, " \n\r");
-				if(!port) {
-					myport=dp;
-				}
-				else
-				  myport = atoi(port);
-				spass = strtok(NULL, " \n\r");
-				if(!spass) {
-					up = 0;
-				}
-				else
-				{
-					up = 1;
- 					strncpy(spast,spass,29);
-					
-				}
-				
-				sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :Making reality through %s port %i\n",nck,myserver,myport);
-				write(s, buffer, strlen(buffer));
-				sock_c = do_connect(myserver, myport);
-				if(sock_c < 0)
-					sock_c = -1;
-				if(up){
-				sprintf(buffer,"PASS %s\n",spast);
-				write(sock_c,buffer,strlen(buffer));
-				}
-				write(sock_c, user, strlen(user));
-				sprintf(buffer,"NICK %s\n",nck);
-				write(sock_c, buffer, strlen(buffer));
-				memset(buffer, 0, 1024);
-				read(sock_c, buffer, 1023);
-				if(strlen(buffer) > 0)
-				{
-					write(s, buffer, strlen(buffer));
-				}
-								continue;
-			}
-		}
-		if(sock_c >= 0)
-		{
-			if(FD_ISSET(sock_c, &rset))
-			{
-				memset(buffer, 0, 1024);
-				if(read(sock_c, buffer, 1023) <= 0)
-				{
-					close(s);
-					close(sock_c);
-					return;
-				}
-				write(s, buffer, strlen(buffer));
-			}
-		}
-	}
-}
-
-
-loadconf(){
-  FILE *conf;
-  char *confcmd,*confval;
-  char line[100];
-  int  howfar;
-  
-  if((conf=fopen("bnc.conf","r")) == NULL) {
-  	printf("***Ack! No config file (bnc.conf).\n");
-  	return 1;
+    }
   }
-  howfar=0;
-  while(!feof(conf)){
-        memset(line,0,100);
- 	fgets(line,100,conf);
- 	howfar++;
- 	if(!strlen(line))
- 	  continue;
-	if(strncmp(line,"#",1)){
-	        confcmd=NULL;
-	        confval=NULL;
-		confcmd=strtok(line,":");
-		if(!confcmd)
-		  continue;
- 		confval=strtok(NULL,"\n");
- 		if(!confval)
- 		  continue;
- 		if(!strcasecmp(confcmd,"pt"))
- 			pt=atoi(confval);
- 		else
-  		if(!strcasecmp(confcmd,"mu"))
- 			mu=atoi(confval);
- 		else
- 		if(!strcasecmp(confcmd,"dp"))
- 			dp=atoi(confval);
- 		else
- 		if(!strcasecmp(confcmd,"ps")){
- 			strcpy(ps,confval);
- 			po=1;
- 		}
- 		else
- 		printf("Config line %i rejected-what weirdo told you '%s' goes in my config file?\n",howfar,confcmd);
- 		
- 	}
-  }                     
-  
-  fclose(conf);
-  return 0;     
+  fprintf (jr->logfile, "%s: %s\n", tmpa, logbuff);
+  fflush (jr->logfile);
+  return 0;
 }
-				
-int
-main(int argc, char *argv[])
+struct deathwish
 {
-	int a_sock = 0;
-	int s_sock = 0;
-       	struct sockaddr_in sin;
-	int sinlen;
-	int mypid;
-                                                                                                                                                                                             
-        pt=6667;
-        mu=100;
-        dp=6667;
-        cu=0;
-        po=0;
-	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.2.0 GNU project (C) 1997-98\n");
-	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
-	
-	if(loadconf()) {
-		printf("***Using defaults(Not recommended)\n");
-	}
-        printf("--Configuration:\n");
-        printf("    Daemon port......:%u\n    Password.........:%s\n    Maxusers.........:%u\n    Default conn port:%u\n",pt,ps,mu,dp);
-         
-	s_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if(s_sock < 0)
-	{
-		perror("socket");
-		exit(0);
-	}
-	memset(&sin, 0, sizeof(struct sockaddr_in));
-	sin.sin_family = AF_INET;
-        sin.sin_port = htons(pt);
-        sin.sin_addr.s_addr = INADDR_ANY;
-	if(bind(s_sock, (struct sockaddr *)&sin, sizeof(struct sockaddr_in)) < 0)
-	{
-		perror("bind");
-		exit(0);
-	}
-         if(listen(s_sock, 10) < 0)
-	{
-		perror("listen");
-		exit(0);
-	}
-	        
-        signal(SIGHUP, SIG_IGN);
-        switch(fork())
-        {
-	        case -1:
-         	       	printf("fatal error: unable to fork()");
-                	exit(-1);
-                case 0:
-                setsid();
-                break;
-                default:
-                exit(0);
-      
-        }
-	signal(SIGCHLD, child_killer);
-        while(1)
-        {
-                sinlen = sizeof(sin);
-                close(a_sock);
-                a_sock = accept(s_sock, (struct sockaddr *)&sin, &sinlen);
-                if(a_sock < 0 && errno == EINTR)
-                        continue;
-                if(a_sock < 0)
-                {
-                        perror("accept");
-                        continue;
-                }
-                
-                cu++;
-          
-                if((cu>mu) && (mu>0)){
-                	close(a_sock);
-                	cu--;
-                	continue;
-                }
-                switch(fork())
-                {
-                        case -1:
-                        	continue;
-                        case 0:
-                     	
-                                server(a_sock);
-                                exit(0);
-                }
-        }
+	int reason;
+	char *message;
+};
+
+struct deathwish bncerr[] =
+{
+  { CONFNOTFOUND, "The config file was not found"},
+  { CONFREQNOTHAPPY, "Configuration file did not satisfy all requirments"},
+  { FATALITY, "Fatal error such as lack of ram occured"},
+  { SOCKERR, "Unable to open socket"},
+  { BINDERR, "Unable to bind to socket"},
+  { LISTENERR, "Unable to open socket for listen"},
+  { BACKGROUND, "Successfully went into the background"},
+  { SELECTERR, "Select call returned in error" },
+  { DOWNER, "Shut down by Supervisor" },
+  { KILLED, "I wuz shot down!" },
+  { 0, "Died for an unknown reason" }
+};
 
 
+void bnckill (int reason)
+{
+	int p;
+	char *reply;
+	for(p=0;;p++)
+	{
+		if((reason == bncerr[p].reason) || (bncerr[p].reason == 0))
+		{
+			reply=bncerr[p].message;
+			break;
+		}
+	}
+
+	if (foreman)
+		printf ("Exit %s{%i} :%s.\n", myself, reason, reply);
+
+	logprint(&bncconf,"Exit %s{%i} :%s.\n", myself, reason, reply);
+	exit (reason);
 }
 
+int main (int argc, char **argv)
+{
+	int tmps;
+	char *avhd;
+	char *pars;
+	char *conffile;
+	FILE *mylife;
+	
+	struct vhostentry *hockum;
+
+	myself = argv[0];
+	foreman = 1;
+  
+  
+  	
+	if (argc > 1)
+	{
+		conffile = argv[1];
+	}
+	else
+	{
+		conffile=buffer;
+		strncpy (conffile, argv[0], PACKETBUFF);
+		strncat (conffile, ".conf", PACKETBUFF);
+		conffile[PACKETBUFF]='\0';
+	}
+	printf ("Irc Proxy " VERSION " GNU project (C) 1998-99\n");
+	printf ("Coded by James Seter :bugs-> (Pharos@refract.com) or IRC pharos on efnet\n");
+	printf ("--Using conf file %s\n", conffile);
+
+	memset (&bncconf, 0, sizeof (bncconf));
+	bncconf.cport = 6667;
+	
+	pars = strrchr (argv[0], '/');
+	if (pars == NULL)
+		pars = argv[0];
+	else if (strlen (pars) > 1)
+		pars++;
+
+	strcpy (bncconf.pidfile, "./pid.");
+	strncat (bncconf.pidfile, pars, 256);
+
+	strcpy (bncconf.dpass, "-NONE-");
+	bncconf.dpassf = 0;
+	bncconf.identwd = 0;
+	avhd = getenv ("IRC_HOST");
+	if (avhd != NULL)
+	{
+		strncpy (bncconf.vhostdefault, avhd, HOSTLEN);
+		bncconf.vhostdefault[HOSTLEN]='\0';
+	}
+	tmps = loadconf (conffile, &bncconf);
+	if(tmps)
+	{
+		bnckill (tmps);
+	}
+
+	printf ("--Configuration:\n");
+	printf ("    Daemon port......:%u\n    Maxusers.........:%u\n    Default conn port:%u\n    Pid File.........:%s\n",
+		bncconf.dport, bncconf.maxusers, bncconf.cport, bncconf.pidfile);
+	
+	if (bncconf.vhostdefault[0] == '\0')
+	{
+		printf ("    Vhost Default....:-SYSTEM DEFAULT-\n");
+	}
+	else
+	{
+		printf ("    Vhost Default....:%s\n", bncconf.vhostdefault);
+	}
+	
+	if (bncconf.vhostlist != NULL)
+	{
+		hockum = bncconf.vhostlist;
+		while (hockum != NULL)
+		{
+			printf ("    Vhost entry......:%s\n", hockum->vhost);
+			hockum = hockum->next;
+		}
+	}
+	tmps = initproxy (&bncconf);
+	if(tmps)
+	{
+		bnckill (tmps);
+	}
+	signal (SIGHUP, SIG_IGN);
+	
+	switch (tmps = fork ())
+	{
+		case -1:
+		{
+			bnckill (FORKERR);
+		}
+		case 0:
+		{
+			foreman = 0;		/* this is a child process printing should no longer be allowed */
+			setsid ();
+			break;
+		}
+		default:
+		{
+			printf ("    Process Id.......:%i\n", tmps);
+			bnckill (BACKGROUND);
+		}
+	}
+	
+	if ((mylife = fopen (bncconf.pidfile, "wb")) != NULL)
+	{
+		fprintf (mylife, "%i\n", getpid ());
+		fclose (mylife);
+	}
+	logprint(&bncconf, "BNC started. pid %i", getpid ());
+	tmps = ircproxy (&bncconf);
+	if(tmps)
+	{
+		bnckill (tmps);
+	}
+	return 0;
+}

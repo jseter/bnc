@@ -1,34 +1,401 @@
-1.INTRODUCTION
-	BNC is a simple program designed to Proxy irc sessions.
-  It is user configurable using the file bnc.conf and includes
-  multi-user, passwords, and other basic necessities.
+ __________    ______  ____     _________
+/ \  ____  \  / \     \\   \   / \   ____\
+\  \ \___\  \ \  \  \\  \   \  \  \  \___/
+ \  \  ____ <  \  \  \ \     \  \  \  \
+  \  \ \___\  \ \  \  \  \    \  \  \  \_____
+   \  \_______/  \  \__\\  \ __\  \  \_______\
+    \/_______/    \/__/   \/__/    \/_______/   IRC PROXY
+   
+BNC 2.6.2 (c) 1998-99 by James Seter AKA Pharos on efnet
+Site:
+  http://bnc.refract.com
+Nag:
+  Please donate, please donate, please donate
+  information about donation at bottom.
 
-2.COMPILATION
-	I would tell you how to un-tar/gz this file, but your
-  reading this so why would you need help :-)
-	To compile bnc simply type:
-  make
+Table of Contents
 
-3.CONFIGURATION
-	The configuration file give BNC the nessesary info to
-  process such as the port to bind to and what port to request
-  when a conn is requested, also passwords and maxusers.
-
-4.LOADING
-  type:
-  bnc
-
-5.CLIENT SIDE
-	When using various clients you connect to the server in
-  which the daemon is ran.  In ircii and other clients you will 
-  have to give your password by typing /quote pass <password> to
-  continue, in Mirc you can simply /server bnc.server.net port pass
-  to connect.  Once your pass is ok'ed you can tell it to connect
-  to an irc server by typing /quote conn [irc.server.net] <port> <pass>.
-
-6.GNU
-	Yeah you know how this works so just realize this is gnu.
+   1.  INTRODUCTION ...............................................    2
+      1.1  Features ...............................................    2
+      1.2  Failures ...............................................    2
+      1.3  To Do ..................................................    2
+   2.  COMPILATION ................................................    3
+      2.1  Installation ...........................................    3
+   3.  CONFIGURATION ..............................................    4
+      3.1 ON-THE-FLY configuration commands .......................    5
+   4.  SETTING UP CRONTAB .........................................    6
+   5.  CREDITS ....................................................    6
+   6.  THE GNU WAY ................................................    6
 
 
 
---Pharos
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+James Seter                                                     [PAGE 1]
+
+BNC                             IRC Proxy Daemon              April 1998
+
+
+1.  INTRODUCTION
+
+   IRC in general over the years has progressed into a very complex host
+   for multitudes of different types of people.  BNC which is a acro for
+   BouNCe is a daemon designed to allow some people who do not have
+   access to the net in general, but who do have access to another pc
+   that can reach the net, the ability to BouNCe though this pc to IRC.
+  
+   BNC also satisfies as a host to allow users to Bounce through shells
+   to IRC thus allowing for many features such as an interresting
+   internet address commonly used for show or for benifits such as mild 
+   protection from commonly used attacks such as DoS by covering a users
+   real IP with that IP of a machine more capable of handling these
+   attacks.
+
+1.1 Features
+
+   BNC sports many important advances, including the following:
+   
+   RFC 1459 compatible.
+   Vhost support.
+   Vhost lists in configuration file, to be displayed on call.
+   Password option for securety.
+   ./bncsetup dialog based script for automatically makeing .conf files.
+   Additional password for ADMIN mode.
+   NON-spawning code with crontab script to keep daemon alive.
+   Daemon commands for ON-THE-FLY single-user reconfiguration of Vhosts
+     and connecting to a server.
+   Ability to include the bounce address in the password; for quick,
+     efficient connection to an irc host.
+   Optional Logging of connects, failures, and other important data.
+   Identwd dynamic ident support for on-the-fly per-user ident changing.
+
+1.2 Failures
+
+   BNC at this time cannot do the following:
+
+     Not sure, the last thing it couldn't do is now in the Features :D
+
+
+
+
+
+
+
+
+James Seter                                                     [PAGE 2]
+
+BNC                             IRC Proxy Daemon              April 1998
+
+
+1.3 To Do
+
+   Things I hope to accomplish in later versions:
+
+   Ban lists. (skip that, allow lists work just fine)
+   Non-Blocking sockets.
+   More Admin commands.
+   DCC automatic redirection through Proxy.
+   Irc Docking
+
+2.  COMPILATION
+
+   To compile you must extract that compressed tar to some directory
+   such as a subdirectory of a normal users.
+   NOTE BNC IS NOT DESIGNED TO BE RAN AS ROOT OR SUID. DOING SO CAN
+   POTENTIALLY COMPROMISE THE SECURETY OF THE MACHINE.
+
+   With that in mind, log into the shell as a normal user.  After
+   uncompressing the archive (considering your reading this, i hope you
+   already figured this out) into your shell, Change to that directory.
+
+   Compiling BNC requires that you run the GNU autoconf created script
+   ./configure which will calculate system-dependent values and option
+   needed by BNC to properly operate on a wider range of OS's.  After 
+   configure is done doing its job, BNC is made by running 'make' which
+   is included with most GNU C compilers.  After make completes, unless
+   an unexpected error has occured, the executable binary 'bnc' should
+   be located in that directory.
+      
+2.1 Installation
+
+   The best method for installation is to move the executable to a
+   different subdirectory of your home directory on the shell along with
+   the script bncchk and the configuration file (normally bnc.conf) that
+   you make yourself using the provided example file 'example.conf'.
+   An example is as follows (sizes and directory names depends on you):
+
+   bnc@XNation:/home/bnc/phbnc$ ls -lF
+
+   -rwx______   1 bnc      users         544 Aug  7 11:13 bncchk*
+   -rwx______   1 bnc      users        6794 Aug  7 09:57 bncsetup*
+   -rw-------   1 bnc      saints        747 Apr 14 20:08 bnc.conf
+   -rw-------   1 bnc      saints          4 Apr 13 19:14 pid.bnc
+
+
+
+
+James Seter                                                     [PAGE 3]
+
+BNC                             IRC Proxy Daemon              April 1998
+
+
+3.  CONFIGURATION
+
+   Most of the configuration is contained within a configuration file
+   bnc.conf which it looks for in its current directory.  BNC will not
+   run if this file is not present, or if the file fails to satisfy the
+   required information to properly load.  An option configuration file
+   can be specified on the command line of BNC.
+
+   The configuration file is line based, each line is a seperate option.
+   What option is set is determined by the Directive in this format:
+
+   Directive_Name:Argument:Argument....
+
+   Required directives are D (Daemon Configuration) and S (Supervisor
+   Password).
+
+   Format is as follows:
+
+   D:Listening port number:Maxusers limit number:Password
+   
+   Listening port:  Port number on the host to attach to.
+   Maxusers limit number: Number of users that can be connected to BNC
+     at the same time, 0 means unlimited.
+   Password:  An optional password required for an user to be able to
+     use the proxy daemon.
+
+   S:Password
+
+   Password:  A required Password for a normal user to become an admin
+     through use to the pre-connect command /quote MAIN (pass).
+     it is best to make the Supervisor pass and the listening pass be 
+     two seperate passes.
+
+
+   All the other directives can be best represented within the
+   example.conf file included with current versions of BNC, and are
+   beyond the scope of this document.  Please take time to read the
+   config file and all included documentation before requesting new
+   features.
+
+   Also note that after you compile bnc you can use ./bncsetup to create
+   .conf files for you
+
+
+
+
+
+
+    
+
+
+   
+
+
+James Seter                                                     [PAGE 4]
+
+BNC                             IRC Proxy Daemon              April 1998
+
+
+3.1 ON-THE-FLY configuration commands
+
+   BNC includes raw level commands for control during the connection
+   phase.  After the connection password argument has been suceeded and
+   the RFC required NICK and USER (should be provided by the client) are
+   all satisfied, the proxy is in a Limbo stage where as certain
+   configuration commands can be issued to change various options.
+
+   If the client cannot handle the command as just /COMMAND then issue the
+   command as /QUOTE COMMAND or /RAW COMMAND or as the documentation of the
+   client specifies to send directly to a server.
+
+   Syntax is in argument form as <REQUIRED> [optional]
+
+   Commands are as follows:
+
+   Normal users commands
+   ---------------------
+   CONN <server address> [port] [pass]
+     This will initialize a connection to the real irc server and begin
+     the two-way communication between you and the real irc server,
+     ending the bnc command session.
+   VIP [new virtual host]
+     Issuing VIP alone will list all the V lines included in the
+     configuration file.  These lines are not required to use an address
+     and are only there for reference.  VIP with an argument will change
+     the address that BNC will attempt to connect to irc with.
+   VDF 
+     Issuing this command will restore the vhost to the address specified
+     on the X line of the connfiguration file, or if that line is absent,
+     restore it to the system default.
+   VN
+     This command will change the vhost to the system default, bypassing
+     the X line of that configuration file.
+   MAIN <Supervisor password>
+     Sucessful usage of this command will allow one to use the Admin
+     level commands.
+   Admin level commands
+   --------------------
+   BWHO
+     This command will list the login time nick, and the File descripter
+     number for all current fully logged on users (meaning the user has
+     to of used the CONN command and be on IRC.
+   BKILL <FD>
+     This command will kill the user who's FD matches the argument.
+   DIE
+     This command is not fully functional, but will kill all users and
+     end the daemons running process.
+   BDIE
+     This command is more friend version of DIE.
+
+James Seter                                                     [PAGE 5]
+
+BNC                             IRC Proxy Daemon              April 1998
+   
+
+  LISTHOST
+     Lists IP's allowed to use BNC.
+  ADDHOST <number (usually 1)> <wildcard IP>
+     Adds an IP to use bnc.
+
+4.  SETTING UP CRONTAB
+
+   BNC includes a script called bncchk that uses the pid file created by
+   the BNC executable to determine if it is executing. The bncchk file 
+   needs to be edited and the proper lines modified:
+
+   BNCBIN=bnc      
+   BNCPIDFILE=pid.bnc
+   BNCPATH=/home/bnc/bnc2.2.7
+   
+   The name of the varible basically tells it all.
+
+   Inside the crontab should be the line:
+
+   0,10,20,30,40,50 * * * * /home/myself/bncchk >/dev/null 2>&1
+
+   Modify the path to the bncchk file.  This line will check to see if
+   bnc is running every 10 minutes, and if it is not running, will
+   attempt to restart BNC with the information provided by the varibles
+   in the bncchk file.
+
+5.  CREDITS
+
+	James Seter (Pharos) ....................: Pharos@DAL.net
+          Author of the program.
+        Brian Mitchell (Halflife) ...............: ??
+          One helluva good coder, coded the original base that was used
+          in pre 2.2.8 editions, without him, I may of never learned
+          sockets.
+	Unknown (White_dragon) ..................: WD@DAL.net
+          Ideas. Lots of patches. Major advancements to BNC.
+        Unknown (Volatile) ......................: vol@sekurity.org
+          Help on Bind and other socket protection
+        Unknown (Barubary) ......................: ??
+          Helped on fifo system
+        Unknown (IceWizard) .....................: ice@walt-disney.com
+          Very suggestive and helpfull person, wrote original ./bncsetup
+	James Nonnemaker (Postal Phreak) ........: Postal_Phreak@dal.net
+          Win95 Port/Suggestions
+        Unknown (dopey) .........................: doughpee@usa.net
+          example.conf reorganization and suggestions
+        Unknown (Y0SHi) .........................: yoshi@skipnet.com
+          Provided me with SunOS access for porting purposes.
+	Jason F. Aristide III (PurpleMotion) ....: PurpleMotion@DAL.net
+          Suggestions, Documents and example scripts.
+
+   Anybody else who sent me bug errors or suggestions, Thanks everybody.
+
+6.  THE GNU WAY
+
+   The GNU license can be found in the file COPYING included with this
+   distribuition.  Please read that file for a complete description of
+   your rights as a user.
+
+
+James Seter                                                     [PAGE 6]
+
+BNC                             IRC Proxy Daemon              April 1998
+
+
+   If you get use out of BNC please help the GNU process by donating
+   money to me.  Small contributions such as $5 go a long way and I
+   appreciate anybody who contribuits. BNC is free, and its use thereof,
+   modifications can be made and released as long as the whole source is
+   included with credits made to the appropriate parties.  
+
+   Donations to:
+   BNC
+   P.O. Box 657
+   Doniphan Mo, 63935
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+James Seter                                                     [PAGE 7]
+

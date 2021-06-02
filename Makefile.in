@@ -1,0 +1,32 @@
+OBJS = bnc.o conf.o server.o cmds.o
+LIBS = @LIBS@
+OPTS = -O3
+COPT = -DVERSION='"v2.6.2"' -Wall
+OOPT =
+STRIP = strip
+CC = gcc
+
+ALL: bnc mkpasswd
+	@echo "*** Done compiling required files"
+	@echo "Please read the README file included"
+
+mkpasswd:mkpasswd.c
+	${CC} ${OPTS} ${COPT} ${LIBS} -o mkpasswd mkpasswd.c
+bnc.o: config.h common.h bnc.c Makefile
+	${CC} ${OPTS} ${COPT} -c bnc.c
+conf.o: config.h common.h conf.c Makefile
+	${CC} ${OPTS} ${COPT} -c conf.c
+cmds.o: config.h common.h cmds.c Makefile
+	${CC} ${OPTS} ${COPT} -c cmds.c
+server.o: config.h common.h server.c Makefile
+	${CC} ${OPTS} ${COPT} -c server.c
+ 
+bnc: ${OBJS} Makefile
+	${CC} ${OPTS} ${OOPT} ${LIBS} -o bnc ${OBJS}
+	${STRIP} bnc
+clean:
+	rm -rf *.o *~ core bnc mkpasswd
+dist-clean: clean
+	rm -rf Makefile config.cache config.h config.log config.status pid.bnc bnc.conf* bnc.log
+	cp Makefile.out Makefile
+distclean: dist-clean
