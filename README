@@ -24,7 +24,7 @@
   have to give your password by typing /quote pass <password> to
   continue, in Mirc you can simply /server bnc.server.net port pass
   to connect.  Once your pass is ok'ed you can tell it to connect
-  to an irc server by typing /quote conn irc.server.net [port].
+  to an irc server by typing /quote conn [irc.server.net] <port> <pass>.
 
 6.GNU
 	Yeah you know how this works so just realize this is gnu.

@@ -64,11 +64,12 @@ server(int s)
 	char user[1024];
 	char nick[100];
 	char tm[2];
-	int u,n,p;
+	int u,n,p,up;
 	fd_set rset;
 	u_short myport;
-	char *cmd, *server, *port,*nck,*pass;
+	char *cmd, *server, *port,*nck,*pass,*spass;
 	char myserver[1024];
+	char spast[30];
 	strcpy(tm," ");
 	u=1;
 	n=1;
@@ -117,7 +118,7 @@ server(int s)
         }
         sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :Level two, lets connect to something real now\n",nck);
 	write(s, buffer, strlen(buffer));
-        sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :type /quote conn [server] <port> to connect\n",nck);
+        sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :type /quote conn [server] <port> <pass> to connect\n",nck);
 	write(s, buffer, strlen(buffer));
 	while(1)
 	{
@@ -148,6 +149,8 @@ server(int s)
 				cmd = NULL;
 				server = NULL;
 				port = NULL;
+				spass = NULL;
+				up = 0;
 				cmd = strtok(buffer, " ");
 				if(!cmd)
 					continue;
@@ -163,11 +166,26 @@ server(int s)
 				}
 				else
 				  myport = atoi(port);
+				spass = strtok(NULL, " \n\r");
+				if(!spass) {
+					up = 0;
+				}
+				else
+				{
+					up = 1;
+ 					strcpy(spast,spass);
+					
+				}
+				
 				sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :Making reality through %s port %i\n",nck,myserver,myport);
 				write(s, buffer, strlen(buffer));
 				sock_c = do_connect(myserver, myport);
 				if(sock_c < 0)
 					sock_c = -1;
+				if(up){
+				sprintf(buffer,"PASS %s\n",spast);
+				write(sock_c,buffer,strlen(buffer));
+				}
 				write(sock_c, user, strlen(user));
 				sprintf(buffer,"NICK %s\n",nck);
 				write(sock_c, buffer, strlen(buffer));
@@ -196,13 +214,6 @@ server(int s)
 		}
 	}
 }
-
-void fireman()
-{
-	printf("Fire!!!!!");
-	while(waitpid(-1, NULL, WNOHANG) > 0);
-}
-                  
 
 
 loadconf(){
@@ -269,7 +280,7 @@ main(int argc, char *argv[])
         cu=0;
         po=0;
 	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.0.17 GNU project (C) 1997-98\n");
+	printf("\nIrc Proxy v2.2.0 GNU project (C) 1997-98\n");
 	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
 	
 	if(loadconf()) {
