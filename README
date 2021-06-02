@@ -1,0 +1,35 @@
+1.INTRODUCTION
+	BNC is a simple program designed to Proxy irc sessions.
+  It is user configurable using the file bnc.conf and includes
+  multi-user, passwords, and other basic necessities.
+
+2.COMPILATION
+	I would tell you how to un-tar/gz this file, but your
+  reading this so why would you need help :-)
+	To compile bnc simply type:
+  gcc -o advbnc advbnc.c
+
+3.CONFIGURATION
+	The configuration file give BNC the nessesary info to
+  process such as the port to bind to and what port to request
+  when a conn is requested, also passwords and maxusers.
+
+4.RUNNING
+	Still working on making it do this itself but to load
+  the daemon type:
+  nohup advbnc&
+
+5.CLIENT SIDE
+	When using various clients you connect to the server in
+  which the daemon is ran.  In ircii and other clients you will 
+  have to give your password by typing /quote pass <password> to
+  continue, in Mirc you can simply /server bnc.server.net port pass
+  to connect.  Once your pass is ok'ed you can tell it to connect
+  to an irc server by typing /quote conn irc.server.net [port].
+
+6.GNU
+	Yeah you know how this works so just realize this is gnu.
+
+
+
+--Pharos

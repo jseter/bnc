@@ -12,7 +12,7 @@
 #include <netdb.h>
 extern h_errno;
 
-int pt,mu,dp,cu;
+int pt,mu,dp,cu,po;
 char ps[20];
 
 int
@@ -59,7 +59,8 @@ server(int s)
 	char myserver[1024];
 	u=1;
 	n=1;
-	p=1;
+	if(po)
+	  p=1;
 	cu++;
 	while((u+n+p)&&3){
 		memset(buffer, 0, 1023);
@@ -212,8 +213,10 @@ loadconf(){
  		if(!strcasecmp(confcmd,"dp"))
  			dp=atoi(confval);
  		else
- 		if(!strcasecmp(confcmd,"ps"))
+ 		if(!strcasecmp(confcmd,"ps")){
  			strcpy(ps,confval);
+ 			po=1;
+ 		}
  		else
  		printf("Config line %i rejected-what weirdo told you '%s' goes in my config file?\n",howfar,confcmd);
  		
@@ -237,8 +240,9 @@ main(int argc, char *argv[])
         mu=100;
         dp=6667;
         cu=0;
-	strcpy(ps,"default");
-	printf("\nIrc Proxy v0.0.970804 GNU project (C) 1997-98\n");
+        po=0;
+	strcpy(ps,"-NONE-");
+	printf("\nIrc Proxy v2.0.1 GNU project (C) 1997-98\n");
 	printf("Coded by James Seter\n");
 	
 	if(loadconf()) {
@@ -282,8 +286,10 @@ main(int argc, char *argv[])
 			case -1:
 				continue;
 			case 0:
+				printf("TEST %i/%i\n",cu,mu);
 				if(cu>=mu)
 				  exit(0);
+				cu++;
 				server(a_sock);
 				exit(0);
 		}
