@@ -12,6 +12,7 @@
 #include "sbuf.h"
 #include "struct.h"
 #include "send.h"
+#include "ctcp.h"
 
 #define MAXMOTDLINE 512
 extern int mytoi(char *buf);
@@ -21,7 +22,7 @@ extern int bewmstick (void);
 extern int logprint(confetti *jr,const char *format,...);
 extern int send_queued(struct lsock *cptr);
 extern int passwordokay (char *s, char *pass);
-extern int do_connect (char *vhostname, char *hostname, u_short port, char *uname, int *status);
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass);
 extern int thestat(char *buf,int len, struct cliententry *cptr);
 extern struct cliententry *getclient(struct cliententry *cptr, int nfd);
 extern void add_access (confetti *, accesslist *);
@@ -103,6 +104,7 @@ BUILTIN_COMMAND(cmd_resume);
 BUILTIN_COMMAND(cmd_resumealive);
 BUILTIN_COMMAND(cmd_dumpll);
 BUILTIN_COMMAND(cmd_bypass);
+BUILTIN_COMMAND(cmd_privmsg);
 
 BUILTIN_COMMAND(srv_nick);
 BUILTIN_COMMAND(srv_tellnick);
@@ -111,6 +113,8 @@ BUILTIN_COMMAND(srv_kick);
 BUILTIN_COMMAND(srv_part);
 BUILTIN_COMMAND(srv_ping);
 BUILTIN_COMMAND(srv_endmotd);
+BUILTIN_COMMAND(srv_privmsg);
+
 
 cmdstruct serverbnccmds[] =
 {
@@ -121,6 +125,7 @@ cmdstruct serverbnccmds[] =
 	{ "KICK", srv_kick, FLAGCONNECTED, FLAGNONE },
 	{ "PART", srv_part, FLAGCONNECTED, FLAGNONE },
 	{ "376", srv_endmotd, FLAGCONNECTED, FLAGNONE },
+	{ "PRIVMSG", srv_privmsg, FLAGCONNECTED, FLAGNONE },
 	{NULL, NULL, 0,0}
 };
 
@@ -154,6 +159,7 @@ cmdstruct clientbnccmds[] =
  	{ "RESUME", cmd_resumealive, FLAGPASS, FLAGNONE },
  	{ "DUMPLL", cmd_dumpll, FLAGNONE, FLAGNONE },
  	{ "BYPASS", cmd_bypass, FLAGCONNECTED, FLAGNONE },
+	{ "PRIVMSG", cmd_privmsg, FLAGCONNECTED, FLAGNONE },
 	{ NULL, NULL, 0, 0 }
 };
 
@@ -331,64 +337,6 @@ int ismenuh(char *prefix, char *nick)
 	return m;
 }
 
-int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass)
-{
-	int cs;
-	int res;
-	
-	cptr->flags &= ~FLAGAUTOCONN;
-	cptr->susepass=0;
-	
-	if(cptr->flags & FLAGCONNECTED)
-	{
-		tprintf(&cptr->loc, "NOTICE AUTH :Disconnecting old\n", server, port);		
-		if(cptr->srv.fd > -1)
-		{
-			close(cptr->srv.fd);
-			cptr->srv.fd=-1;
-		}
-		sbuf_clear(&cptr->srv.sendq);
-		sbuf_clear(&cptr->srv.recvq);
-		cptr->flags &= ~FLAGCONNECTED;
-	}
-	
-	tprintf(&cptr->loc, "NOTICE AUTH :Making reality through %s port %i\n", server, port);	
-
-	cs = do_connect(cptr->vhost, server, port, cptr->uname, &res);
-	if (cs < 0)
-	{
-		if(cs == -9)
-			tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection (Supplied Vhost is not on this system)\n");
-		else
-			tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection\n");
-		return -1;
-	}
-
-	if(res == 0)
-	{
-		tprintf(&cptr->loc, "NOTICE AUTH :Suceeded connection\n");
-		logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, server);
-	}
-	else
-		cptr->flags |= FLAGCONNECTING;		
-
-	strncpy (cptr->onserver, server, HOSTLEN);
-	cptr->onserver[HOSTLEN]='\0';
-	strncpy (cptr->sid, server, HOSTLEN);
-	cptr->sid[HOSTLEN]='\0';
-
-	cptr->srv.fd = cs;
-	cptr->flags |= FLAGCONNECTED;
-
-	if(pass)
-		tprintf(&cptr->srv, "PASS :%s\n", pass);
-	tprintf(&cptr->srv, "NICK %s\n", cptr->nick);	
-	tprintf(&cptr->srv, "USER %s \"%s\" \"%s\" :%s\n", cptr->uname, cptr->fromip, cptr->onserver, cptr->realname);
-	return 0;
-
-}
-
-
 
 int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **pargv, char *prefix)
 {
@@ -449,11 +397,13 @@ int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **parg
 			{
 				r=irc_connect(cptr, cptr->autoconn, cptr->sport, NULL);
 			}
+
+#if 0
 			if(r > 1)
 			{
 				return r;
 			}
- 			
+#endif
 			return w;
 
 		}
@@ -671,6 +621,62 @@ BUILTIN_COMMAND(srv_tellnick)
 	}
 	return FORWARDCMD;
 }
+
+
+
+BUILTIN_COMMAND(srv_privmsg)
+{
+	char *msg;
+#if 0
+	int i;
+	printf("pargc %i\n", pargc);
+	for(i = 0; i < pargc; i++)
+	{
+//		printf("(%i) %s\n", i, pargv[i]);
+		printf("(%i) ",i);
+		msg = pargv[i];
+		putchar('\'');
+		for(;*msg; msg++)
+		{
+			if(*msg >= ' ' && *msg <= '~')
+				putchar(*msg);
+
+			else if(*msg == '\\')
+				printf("\\");
+			else if(*msg == '\r')
+				printf("\\r");
+			else if(*msg == '\n')
+				printf("\\n");
+			else if(*msg == '\b')
+				printf("\\b");
+			else
+				printf("\\%3.3o", *msg);
+		}
+		putchar('\'');
+		putchar('\n');
+	}
+#endif
+	if(pargc < 3)
+		return FORWARDCMD;
+	msg = pargv[2];
+	if(*msg != '\001')
+		return FORWARDCMD;
+
+	return ct_handle(cptr, prefix, pargv[1], msg, SERVER);
+}
+
+BUILTIN_COMMAND(cmd_privmsg)
+{
+	char *msg;
+	if(pargc < 3)
+		return FORWARDCMD;
+	msg = pargv[2];
+	if(*msg != '\001')
+		return FORWARDCMD;
+
+	return ct_handle(cptr, prefix, pargv[1], msg, CLIENT);
+}
+
 
 BUILTIN_COMMAND(cmd_resumealive)
 {
@@ -959,33 +965,24 @@ BUILTIN_COMMAND(cmd_main)
 }
 BUILTIN_COMMAND(cmd_conn)
 {
-	int cport,r;
+	int cport;
+	int res;
 	
 
 	if (pargc < 2)
-	{
 		return 0;
-	}
-	if (pargc > 2)
-	{
-		cport = mytoi (pargv[2]);
-	}
-	else
-	{
-		cport = jack->cport;
-	}
+
+	cport = (pargc > 2) ? mytoi(pargv[2]) : jack->cport;
+
 	if (pargc > 3)
-	{
-		r=irc_connect(cptr, pargv[1], cport, pargv[3]);
-	}
+		res=irc_connect(cptr, pargv[1], cport, pargv[3]);
 	else
-	{
-		r=irc_connect(cptr, pargv[1], cport, NULL);
-	}
-	if(r > 1)
-	{
-		return r;
-	}
+		res=irc_connect(cptr, pargv[1], cport, NULL);
+
+#if 0
+	if(res > 1)
+		return res;
+#endif
 	return 0;
 }
 
@@ -1280,3 +1277,5 @@ BUILTIN_COMMAND(cmd_keepalive)
 	}
 	return 0;
 }
+
+

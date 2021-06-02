@@ -1,3 +1,18 @@
+2.8.8
+(1) Added support for setting a specific IP to listen on 
+    (listen <[host:]port> [maxusers])
+(2) Enhanced bncsetup to use new conf format and new question to handle
+    specific host entering.
+(3) Changed the Makefile to list libraries last, some crypt libraries
+    predefined their own main function which prevented compiling.
+(4) Reorganized the connection code to fix a bug where a user gets
+    disconnected while connecting to an irc server.
+(5) Socket length was not being set before accept. (Thanks chris)
+(6) Removed old hack code for systems that do not support snprintf.
+(7) Increased error checking in recv code.
+(8) Better parsing of messages
+(9) Server buffers always cleared when connecting to a new server.
+
 2.8.6
 (1) Bnc now lists all docked sessions
 (2) Rewrote the send/recv code

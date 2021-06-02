@@ -1,4 +1,4 @@
-#define VERSION "v2.8.6"
+#define VERSION "v2.8.8"
 #define PACKETBUFF 1024
 
 #define HIGHOVL 16384
@@ -132,6 +132,7 @@ typedef struct
 	struct vhostentry *vhostlist;
 	accesslist *alist, *alist_end;
 
+	char dhost[HOSTLEN+1];
 	char vhostdefault[HOSTLEN+1];
 	char spass[PASSLEN+1];
 	char dpass[PASSLEN+1];

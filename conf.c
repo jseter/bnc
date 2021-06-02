@@ -108,11 +108,45 @@ CONFCMD(conf_password)
 
 CONFCMD(conf_listen)
 {
+	char *src;
+	char *dest;
+	char *eod;
+	char *port;
+#if 0
+	int p;
+
+	for(p = 0; p < pargc; p++)
+	{
+		printf("(%i) %s\n", p, pargv[p]);
+	}
+#endif
 	if(pargc < 2)
 	{
 		return -1;
 	}
-	jr->dport = (mytoi(pargv[1]) % 65535);
+	port = pargv[1];
+	for(src = pargv[1]; *src; src++)
+	{
+		if(*src == ':')
+		{
+			port = src + 1;
+			dest = jr->dhost;
+			eod = dest + HOSTLEN;
+			if(HOSTLEN > src - pargv[1])
+				eod = dest + (src - pargv[1]);
+			
+			for(src = pargv[1]; *src; src++)
+			{
+				if(dest >= eod)
+					break;
+				*dest++ = *src;
+			}
+			*eod = '\0';
+			break;
+		}
+	}
+	
+	jr->dport = (mytoi(port) % 65535);
 	jr->maxusers=0;
 	req|=1;
 	if(pargc < 3)
@@ -374,28 +408,61 @@ int loadconf (char *fname, confetti * jr)
 		}
 		line++;
 		p = 0;
-		tmp = strtok (linbuff, ": \n\r,");
-		if (tmp != NULL)
+		if(strlen(linbuff) < 2)
+			continue;
+		if(linbuff[1] == ':')
 		{
-			if(tmp[0] == '#')
+			/* old style */
+			printf("old style\n");
+			tmp = strtok (linbuff, ":\n\r");
+			if (tmp != NULL)
 			{
-				continue;
-			}
-			pargv[p++] = tmp;
-			while ((tmp = strtok (NULL, ": \n\r,")) != NULL)
-			{
-				pargv[p++] = tmp;
-				if (p > 100)
+				if(tmp[0] == '#')
 				{
-					break;
+					continue;
+				}
+				pargv[p++] = tmp;
+				while ((tmp = strtok (NULL, ": \n\r")) != NULL)
+				{
+					pargv[p++] = tmp;
+					if (p > 100)
+					{
+						break;
+					}
+				}
+				err = confoption (jr, p, pargv);
+				if(err == -1)
+				{
+					printf ("--Option line in error:(%i)\n", line);
 				}
 			}
-			err = confoption (jr, p, pargv);
-			if(err == -1)
-			{
-				printf ("--Option line in error:(%i)\n", line);
-			}
 		}
+		else
+		{
+			tmp = strtok (linbuff, " \n\r,");
+			if (tmp != NULL)
+			{
+				if(tmp[0] == '#')
+				{
+					continue;
+				}
+				pargv[p++] = tmp;
+				while ((tmp = strtok (NULL, " \n\r,")) != NULL)
+				{
+					pargv[p++] = tmp;
+					if (p > 100)
+					{
+						break;
+					}
+				}
+				err = confoption (jr, p, pargv);
+				if(err == -1)
+				{
+					printf ("--Option line in error:(%i)\n", line);
+				}
+			}		
+		}
+
 	}
 	fclose (src);
 	if (req != 3)

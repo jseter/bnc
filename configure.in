@@ -32,6 +32,25 @@ AC_CHECK_LIB(cposix, select, LIBS="$LIBS -lcposix",)
 AC_CHECK_LIB(net, select, LIBS="$LIBS -lnet",)
 AC_CHECK_LIB(crypt, crypt, LIBS="$LIBS -lcrypt",)
 
+dnl Check for SSL support.
+AC_MSG_CHECKING(whether to enable SSL support)
+AC_ARG_WITH(ssl,
+[  -with-ssl              Enable SSL support],
+[ case "$withval" in
+    yes)
+      AC_MSG_RESULT(yes)
+      AC_DEFINE(HAVE_SSL, 1, Define this is the system has SSL support.)
+      LIBS="$LIBS -lssl -lcrypto"
+      AC_CHECK_LIB(ssl, SSL_accept,,AC_MSG_ERROR(Could not find OpenSSL.))
+      ;;
+    no)
+      AC_MSG_RESULT(no)
+      ;;
+  esac ],
+AC_MSG_RESULT(no)
+)
+
+
 AC_CHECK_FUNC(snprintf, AC_DEFINE(HAVE_SNPRINTF),)
 AC_CHECK_FUNC(vsnprintf, AC_DEFINE(HAVE_VSNPRINTF),)
 

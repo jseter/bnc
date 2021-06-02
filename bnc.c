@@ -38,7 +38,7 @@ extern int initproxy (confetti * jr);
 
 extern char buffer[];
 
-
+#if 0
 int bnclog (confetti * jr, char *logbuff)
 {
   static long tata;
@@ -48,7 +48,7 @@ int bnclog (confetti * jr, char *logbuff)
   if (jr->logf != 1)
     return 0;
   tata = time ((long *) 0);
-  snprintf (tmpa, 40, "%s", ctime (&tata));
+  sprintf(tmpa, "%.26s", ctime (&tata));
   for (p = 0; p < 40; p++)
   {
     switch (tmpa[p])
@@ -66,6 +66,8 @@ int bnclog (confetti * jr, char *logbuff)
   fflush (jr->logfile);
   return 0;
 }
+#endif
+
 struct deathwish
 {
 	int reason;
@@ -178,18 +180,21 @@ int main (int argc, char **argv)
 		bnckill (tmps);
 	}
 
-	printf ("--Configuration:\n");
-	printf ("    Daemon port......: %u\n    Maxusers.........: %u\n    Default conn port: %u\n    Pid File.........: %s\n",
-		bncconf.dport, bncconf.maxusers, bncconf.cport, bncconf.pidfile);
+	printf("--Configuration:\n");
+	if(*bncconf.dhost)
+		printf("    Daemon host......: %s\n", bncconf.dhost);	
+	printf("    Daemon port......: %u\n", bncconf.dport);
+	if(bncconf.maxusers == 0)
+		printf("    Maxusers.........: unlimited\n");
+	else
+		printf("    Maxusers.........: %u\n", bncconf.maxusers);
+	printf("    Default conn port: %u\n", bncconf.cport);
+	printf("    Pid File.........: %s\n", bncconf.pidfile);
 	
 	if (bncconf.vhostdefault[0] == '\0')
-	{
-		printf ("    Vhost Default....: -SYSTEM DEFAULT-\n");
-	}
+		printf("    Vhost Default....: -SYSTEM DEFAULT-\n");
 	else
-	{
-		printf ("    Vhost Default....: %s\n", bncconf.vhostdefault);
-	}
+		printf("    Vhost Default....: %s\n", bncconf.vhostdefault);
 	
 	if (bncconf.vhostlist != NULL)
 	{

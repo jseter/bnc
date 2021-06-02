@@ -1,30 +1,29 @@
-LIBS = @LIBS@
-OPTS = -O3
-COPT = -Wall
-OOPT =
-STRIP = strip
-CC = gcc
+LIBS=@LIBS@
+CFLAGS=-O3 -Wall
+OFLAGS=-O3
+CC=@CC@
 
 ALL: bnc mkpasswd
 
 mkpasswd:mkpasswd.c
-	${CC} ${OPTS} ${COPT} ${LIBS} -o mkpasswd mkpasswd.c
-bnc: bnc.o conf.o server.o cmds.o send.o sbuf.o Makefile
-	${CC} ${OPTS} ${OOPT} -o bnc bnc.o conf.o server.o cmds.o sbuf.o send.o ${LIBS}
-#	${STRIP} bnc
+	${CC} ${CFLAGS} -o mkpasswd mkpasswd.c ${LIBS} 
+bnc: bnc.o conf.o server.o cmds.o ctcp.o send.o sbuf.o Makefile
+	${CC} ${OFLAGS} -o bnc bnc.o conf.o server.o cmds.o ctcp.o sbuf.o send.o ${LIBS}
 
 bnc.o: config.h struct.h bnc.c Makefile
-	${CC} ${OPTS} ${COPT} -c bnc.c
+	${CC} ${CFLAGS} -c bnc.c
 conf.o: config.h struct.h conf.c Makefile
-	${CC} ${OPTS} ${COPT} -c conf.c
+	${CC} ${CFLAGS} -c conf.c
 cmds.o: config.h struct.h cmds.c Makefile
-	${CC} ${OPTS} ${COPT} -c cmds.c
+	${CC} ${CFLAGS} -c cmds.c
+ctcp.o: config.h ctcp.c Makefile
+	${CC} ${CFLAGS} -c ctcp.c
 server.o: config.h struct.h server.c Makefile
-	${CC} ${OPTS} ${COPT} -c server.c
+	${CC} ${CFLAGS} -c server.c
 send.o: send.c send.h Makefile
-	${CC} ${OPTS} ${COPT} -c send.c
+	${CC} ${CFLAGS} -c send.c
 sbuf.o: sbuf.c
-	${CC} ${OPTS} ${COPT} -c sbuf.c
+	${CC} ${CFLAGS} -c sbuf.c
 
 clean:
 	rm -rf *.o *~ core bnc mkpasswd

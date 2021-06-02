@@ -4,7 +4,7 @@ MYPID=$$
 TMPFILE=.bnc$MYPID.tmp
 RSLFILE=.bnc$MYPID.rsl
 VHTFILE=.bnc$MYPID.vht
-BSVERSION="0.3 for BNC2.6.4"
+BSVERSION="0.4 for BNC2.8.8"
 SAVEFILE=./bnc.conf
 
 bsclean()
@@ -16,28 +16,50 @@ bsclean()
 saveit()
 {
 echo "Writing your configuration to $SAVEFILE"
+
+if [ -z $BNCHOST ]
+then
+BNCHOST="$BNCPORT"
+else
+BNCHOST="$BNCHOST:$BNCPORT"
+fi
+
+if [ -z $BNCPASS ]
+then
+usepass=
+else
+usepass="password $BNCPASS"
+fi
+
 cat << EOF > $TMPFILE
 #!/home/myhome/bnc
 # BNCSetup $BSVERSION by IceWizard and pharos
 # automaticly generated configuration file.
-# edit the first line and chmod +x this file if you like to load bnc
-# by running its .conf file
-#               Here are additional options you may add:
-# C:6667                        Default Irc Server Port to Connect to
-# X:default.vhost.com           Default Virtual Host to Use
-# V:another.vhost.com           Other Vhosts That Can Be Used
-# V:different.vhost.com          As Many Vhosts as You Want
-# P:pid.bnc                     Name of PID File
-#                                *NOTE PID file is required if bnc is to be
-#                                *used with crontab
-# L:bnc.log                     Name of Log File
-# W:1                           enable dynamic idents on servers with
-#                                identwd installed
-# A:1:*.addy.net                Allow list of ip addresses that can use BNC
-S:$SUPERPASS
-D:$BNCPORT:$MAXUSERS:$BNCPASS
-
+# <REQUIRED>
+# listen <port> [maxusers]	Port to listen for connections on
+# adminpass <password>		Password for Supervisor Access	
+#
+# [Optional]
+# password <password>		Password required for general connection (recommended)
+# allow <address> [address ...]	list of ip/dns's that can use the bnc
+# vhost <address> [address ...] Other Vhosts That Can Be Used (display only)
+# defaultvhost <address>	Default Virtual Host to Use
+# pidfile <filename>		Name of PID File (recommended if you use crontab)
+# motdfile <filename>		Message of the day, displayed on connection of valid user
+# logfile <filename>		Filename where to store logs
+#
+# EXAMPLE CONFIG - CHANGE THIS:
+# if your pass starts with + it is encrypted, if not it is a normal pass
+#
+listen $BNCHOST $MAXUSERS
+adminpass $SUPERPASS
+$usepass
 EOF
+
+# S:$SUPERPASS
+# D:$BNCPORT:$MAXUSERS:$BNCPASS
+
+
 
 cat $TMPFILE $VHTFILE > $SAVEFILE
 echo "Finished! You may now edit $SAVEFILE to make any special changes"
@@ -128,6 +150,21 @@ do
     bsclean 0
   fi
 done
+
+BNCHOST=
+cat << EOF > $TMPFILE
+Enter the host IP or DNS that bnc will use.
+EOF
+
+dialog --yesno "Enter a host for BNC to listen on (default all hosts)?" 5 60
+ERRORLEVEL=$?
+
+if [ x$ERRORLEVEL = x0 ]
+then 
+  dialog --title "Enter host" --inputbox "$(cat $TMPFILE)" 10 62 2> $RSLFILE
+  BNCHOST="$(head -1 $RSLFILE)"
+fi
+
 
 
 cat << EOF > $TMPFILE
@@ -243,7 +280,7 @@ BDONE=
     then
       if ! [ x$BDONE = xq ]
       then
-        echo "A:1:$BDONE" >> $VHTFILE
+        echo "allow $BDONE" >> $VHTFILE
       fi
     fi
   done
@@ -251,7 +288,7 @@ fi
 
 if ! [ -e "$VHTFILE" ]
 then
-  echo "A:1:*" > $VHTFILE
+  echo "allow *" > $VHTFILE
 fi
 
 
@@ -268,7 +305,7 @@ then
   BDONE="$(head -1 $RSLFILE)"
   if ! [ -z BDONE ]
   then
-    echo "X:$BDONE" >> $VHTFILE
+    echo "defaultvhost $BDONE" >> $VHTFILE
   fi
 fi
 
@@ -294,7 +331,7 @@ BDONE=
     then
       if ! [ x$BDONE = xq ]
       then
-        echo "V:$BDONE" >> $VHTFILE
+        echo "vhost $BDONE" >> $VHTFILE
       fi
     fi
   done
@@ -316,7 +353,7 @@ then
   BDONE="$(head -1 $RSLFILE)"
   if ! [ -z BDONE ]
   then
-    echo "L:$BDONE" >> $VHTFILE
+    echo "logfile $BDONE" >> $VHTFILE
   fi
 fi
 
@@ -331,11 +368,11 @@ EOF
 
 if [ x$ERRORLEVEL = x0 ]
 then 
-  dialog --title "Enter logfile Filename" --inputbox "$(cat $TMPFILE)" 10 62 "motd" 2> $RSLFILE
+  dialog --title "Enter motd Filename" --inputbox "$(cat $TMPFILE)" 10 62 "motd" 2> $RSLFILE
   BDONE="$(head -1 $RSLFILE)"
   if ! [ -z BDONE ]
   then
-    echo "M:$BDONE" >> $VHTFILE
+    echo "motdfile $BDONE" >> $VHTFILE
   fi
 fi
 
@@ -343,7 +380,7 @@ dialog --title "Requires Identwd to be installed." --yesno "Do you want bnc's dy
 ERRORLEVEL=$?
 if [ x$ERRORLEVEL = x0 ]
 then
-  echo "W:1" >> $VHTFILE
+  echo "useidentwd 1" >> $VHTFILE
 fi
 
 

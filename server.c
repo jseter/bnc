@@ -17,10 +17,21 @@
 #include <netdb.h>
 #include <pwd.h>
 
+#ifdef HAVE_SSL
+#include <openssl/crypto.h>
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#endif
+
 #include "config.h"
 #include "sbuf.h"
 #include "struct.h"
 #include "send.h"
+#include "ctcp.h"
+
 
 extern int h_errno;
 extern char logbuf[];
@@ -66,89 +77,41 @@ confetti *jack;
 
 
 
-#ifndef HAVE_SNPRINTF
-#ifdef HAVE_VSNPRINTF
-int snprintf(char *str, size_t n, const char *format,...)
-{
-  int p;
-  va_list ap;
-  va_start (ap, format);
-  p = vsnprintf(char *str, size_t n, const char *format,
-  va_end(ap);
-  return p;
-}
-#else
-#define BADBUF 4096
-char mybuf[BADBUF+1];		/* dumb but oh well, attempting securety : */
 
-int snprintf (char *str, size_t n, const char *format,...)
-{
-  int p;
-  va_list ap;
-
-  va_start (ap, format);
-
-  p = vsprintf (mybuf, format, ap);
-  va_end (ap);
-  if(n > BADBUF)
-  {
-    n = BADBUF;
-  }
-  strncpy (str, mybuf, n);
-  str[n]='\0';
-  if (p > n)
-  {
-    p = n;
-  }
-  return p;
-}
-
-int vsnprintf ( char *str, size_t n, const char *format, va_list ap )
-{
-  int p;
-  p = vsprintf (mybuf, format, ap);
-  if(n > BADBUF)
-  {
-    n = BADBUF;
-  }
-  strncpy (str, mybuf, n);
-  str[n]='\0';
-  if (p > n)
-  {
-    p = n;
-  }
-  return p;
-}
-#endif
-#endif
+struct pdcc *headpdcc;
+struct ldcc *headldcc;
 
 
-int xsockprint(int fd,const char *format,...)
-{
-  int p;
-  va_list ap;
-  va_start(ap,format);
-  if(fd == DOCKEDFD)
-  {
-  	return 1; 
-  }
-  
-  p = vsnprintf(buffer, PACKETBUFF, format, ap);
-  va_end(ap);
-  p = send(fd, buffer, p, 0);
-  return p;
-}
-
-
+#if 0
 int logprint(confetti *jr,const char *format,...)
 {
   int p;
   va_list ap;
   va_start(ap,format);
-  p = vsnprintf(buffer, PACKETBUFF, format, ap);
+  p = vsprintf(buffer, PACKETBUFF, format, ap);
   va_end(ap);
   bnclog(jr,buffer);
   return p;
+}
+#endif
+
+int logprint(confetti *jr, const char *format, ...)
+{
+	time_t clk;
+	struct tm *tp;
+	const char dayweek[7][4] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+	const char month[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+	va_list ap;
+	va_start(ap, format);
+
+
+	time(&clk);
+	tp = localtime(&clk);
+	if(tp != NULL)
+		fprintf(jr->logfile, "%.3s %.3s%3d %02d:%02d:%02d %d ", dayweek[tp->tm_wday], month[tp->tm_mon], tp->tm_mday, tp->tm_hour, tp->tm_min, tp->tm_sec, tp->tm_year + 1900);
+	vfprintf(jr->logfile, format, ap);
+	va_end(ap);
+	return 0;
 }
 
 
@@ -246,7 +209,7 @@ int check_match (char *mask)
  * My wildcard matching functions. I think it works well :) Seems to be 
  */
 /*
- * working stablely, but not too sure.                                  
+ * working stablely, but not too sure.
  */
 int
   match (char *str, char *wld)
@@ -533,178 +496,211 @@ int identwd_unlock(int s, struct sockaddr_in *sin, int port, char *uname)
 	return -1;
 }
 
-int do_connect(char *vhostname, char *hostname, u_short port, char *uname, int *status)
+
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass)
 {
+	int fd;
 	int res;
-	int s;
-	int f;
-	int st;
 	struct hostent *he;
 	struct sockaddr_in sin;
-	
-	st = 0;
 
-	f = 1;
-	s = socket (AF_INET, SOCK_STREAM, 0);
-	if (s < 0)
-	{
-		return -2;
-	}
 	
-	res = setnonblock(s);
+	cptr->flags &= ~FLAGAUTOCONN;
+	cptr->susepass=0;
+	
+	if(cptr->flags & FLAGCONNECTED)
+	{
+		tprintf(&cptr->loc, "NOTICE AUTH :Disconnecting old\n", server, port);		
+		if(cptr->srv.fd > -1)
+		{
+			close(cptr->srv.fd);
+			cptr->srv.fd=-1;
+		}
+
+		cptr->flags &= ~FLAGCONNECTED;
+	}
+	sbuf_clear(&cptr->srv.sendq);
+	sbuf_clear(&cptr->srv.recvq);
+
+	
+	tprintf(&cptr->loc, "NOTICE AUTH :Making reality through %s port %i\n", server, port);	
+
+	fd = socket (AF_INET, SOCK_STREAM, 0);
+	if(fd == -1)
+	{
+		tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection\n");
+		return -1;
+	}
+
+	res = setnonblock(fd);
 	if(res == -1)
 	{
-		close(s);
-		return -2;
+		tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection\n");
+		close(fd);
+		return -1;
 	}
-		
+	
 	memset (&sin, 0, sizeof (struct sockaddr_in));
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = INADDR_ANY;
 	
-	if(vhostname)
+	if(cptr->vhost)
 	{
-		res = inet_aton(vhostname, &sin.sin_addr);
+		res = inet_aton(cptr->vhost, &sin.sin_addr);
 		if(res == 0)
 		{
-			he = gethostbyname(vhostname);
+			he = gethostbyname(cptr->vhost);
 			if (he)
 				memcpy (&sin.sin_addr, he->h_addr, he->h_length);
 			else
 				sin.sin_addr.s_addr = INADDR_ANY;
 		}
 	}
-	
-//	printf("vhost: %s %s \n", vhostname, inet_ntoa(sin.sin_addr));
 
-	if (bind (s, (struct sockaddr *) &sin, sizeof (struct sockaddr_in)) < 0)
+	res = bind (fd, (struct sockaddr *) &sin, sizeof(struct sockaddr_in));
+	if(res == -1)
 	{
-		return -9;
+		tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection (Supplied Vhost is not on this system)\n");
+		close(fd);
+		return -1;
 	}
+
 	memset (&sin, 0, sizeof (struct sockaddr_in));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons (port);
 	sin.sin_addr.s_addr = INADDR_ANY;
 
-	res = inet_aton(hostname, &sin.sin_addr);
+	res = inet_aton(server, &sin.sin_addr);
 	if(res == 0)
 	{
-		he = gethostbyname(hostname);
+		he = gethostbyname(server);
 		if (he)
 			memcpy (&sin.sin_addr, he->h_addr, he->h_length);
 		else
 			sin.sin_addr.s_addr = INADDR_ANY;
 	}
-	
-//	printf("host: %s %s \n", hostname, inet_ntoa(sin.sin_addr));
 
 	if (jack->identwd)
-	{
 		identwd_lock(&sin, port);
-	}
 
-	res = connect (s, (struct sockaddr *) &sin, sizeof (sin));
-	if ( res == -1)
+	res = connect (fd, (struct sockaddr *) &sin, sizeof (sin));
+	if( res == -1)
 	{
 		switch(errno)
 		{
 			case EINPROGRESS:
-				st = 1;
+				cptr->flags |= FLAGCONNECTING;
 				break;
 			default:
-				close(s);
-				return -2;
+				tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection\n");
+				close(fd);
+				return -1;
 		}
+	}
+	else
+	{
+		tprintf(&cptr->loc, "NOTICE AUTH :Suceeded connection\n");
+		logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, server);	
 	}
 
 	if (jack->identwd)
-	{
-		identwd_unlock(s, &sin, port, uname);
-	}
-	if(status)
-		*status = st;
-	return s;
+		identwd_unlock(fd, &sin, port, cptr->uname);
+
+	strncpy (cptr->onserver, server, HOSTLEN);
+	cptr->onserver[HOSTLEN]='\0';
+	strncpy (cptr->sid, server, HOSTLEN);
+	cptr->sid[HOSTLEN]='\0';
+
+	cptr->srv.fd = fd;
+	cptr->flags |= FLAGCONNECTED;
+
+	if(pass)
+		tprintf(&cptr->srv, "PASS :%s\n", pass);
+	tprintf(&cptr->srv, "NICK %s\n", cptr->nick);	
+	tprintf(&cptr->srv, "USER %s \"%s\" \"%s\" :%s\n", cptr->uname, cptr->fromip, cptr->onserver, cptr->realname);
+	return 0;
 }
+
 
 
 /* trust the caller of handleclient to filter \0 \n and \r
  * expects buflen be the len of the string, not counting the \0
- * also expects a \0 to be prepended.
+ * also expects a \0 to be appended.
  */ 
 
 int handleclient (struct cliententry *cptr, int fromwho, int buflen, char *buf)
 {
-	int p, f, r;
+	int f;
 	char *prefix;
-	char *pargv[10];
-	char repv[10];
+	char *pargv[9+1];
+	static char ibuf[512+1];
+	char *src;
+	char *eos;
+	int clen;
 	
 	int pargc;
-	int repc;
 	int iswhite;
 	f=0;
 
-        prefix=NULL;
-	pargv[0]=buf;
-	pargc=1;
-	repc=0;
-	
-	iswhite=0; 
-	p=0;
 
-	if(buf[p] == ':')
+	if(buflen <= 0)
+		return 0;
+
+	clen = buflen;
+	if(clen > 512)
+		clen= 512;
+
+	memcpy(ibuf, buf, clen);
+	src = ibuf;
+	eos = src + clen;
+	*eos = '\0';
+
+	for(;*src == ' '; src++); /* skip leading whitespace */
+
+	prefix=NULL;
+	pargc=0;
+	iswhite=0; 
+
+	if(*src == ':')
 	{
-		prefix=&buf[p+1];
+		prefix=++src;
 		pargc=0;
-		p++;
 	}
+	else
+		pargv[pargc++] = src;
 	
-	for(;p<buflen;p++)
+	for(;src < eos; src++)
 	{
 		if(iswhite) /* inside the whitespace */
 		{
-			if( buf[p] == ':' )
+			if( *src == ':' )
 			{
-				pargv[pargc]=&buf[p+1];
+				pargv[pargc]=src + 1;
 				pargc++;
 				break; /* hit a string, meaning done */
 			}
-			if(buf[p] != ' ')
+			if(*src != ' ')
 			{
 				iswhite=0; /* no longer white */
-				pargv[pargc]=&buf[p];
-				pargc++;
+				pargv[pargc++]=src;
 				if(pargc > 9)
-				{
 					break;
-				}
 			}
 		}
 		else
 		{
-		        if(buf[p] == ' ' )
+			if(*src == ' ')
 			{
-				repv[repc++]=buf[p]; /* this shouldn't ever overflow */
-				buf[p]='\0';
+				*src='\0';
 				iswhite=1;
 			}
 		}
 	}
- 	f=handlepclient(cptr, fromwho, pargc, pargv, prefix);
+
+	f = handlepclient(cptr, fromwho, pargc, pargv, prefix);
 	if((cptr->flags & FLAGCONNECTED) && (f == FORWARDCMD))
 	{
-		f=0;
-		for(p=0;p<buflen;p++)
-		{
-			if( buf[p] == '\0' )
-			{
-				if(repc > 0)
-				{
-					buf[p]=repv[f++];
-					repc--;
-				}
-			}
-		}
+		f = 0;
 		if(fromwho == CLIENT)
 		{
 			tprintf(&cptr->srv, "%s\n", buf);
@@ -712,17 +708,277 @@ int handleclient (struct cliententry *cptr, int fromwho, int buflen, char *buf)
 		else
 		{
 			/* don't forward anything if its docked */
-			r=1;
 			if( !(cptr->flags & FLAGDOCKED))
 			{
 				tprintf(&cptr->loc, "%s\n", buf);
 			}
 		}
-		f=0;
 	}
 	return f;
 }
 
+void initldcc(fd_set *rfds)
+{
+	struct ldcc *dccptr;
+	for(dccptr = headldcc; dccptr; dccptr=dccptr->next)
+	{
+		FD_SET(dccptr->fd, rfds);	
+		if(dccptr->fd > highfd)
+			highfd = dccptr->fd;
+	}
+}
+
+void chkldcc(fd_set *rfds)
+{
+	int res;
+	struct sockaddr_in sin;
+	socklen_t sinlen;
+	struct ldcc *dccptr;
+	struct ldcc **parent;
+	struct pdcc *mptr;
+	
+	parent = &headldcc;
+	dccptr = headldcc;
+	while(dccptr)
+	{
+		if(FD_ISSET(dccptr->fd, rfds))
+		{
+			sinlen = sizeof(sin);
+			res = accept(dccptr->fd, (struct sockaddr *)&sin, &sinlen);
+			if(res == -1)
+			{
+				if(errno == EWOULDBLOCK)
+					goto donext;
+				if(errno == EINTR)
+					continue;
+				close(dccptr->fd);
+				
+				*parent = dccptr->next;
+				free(dccptr);
+				dccptr=*parent;
+				continue;
+			}
+			
+			mptr = malloc(sizeof(struct pdcc));
+			if(mptr == NULL)
+			{
+				close(res);
+				goto terml;
+			}
+			
+			memset(mptr, 0 , sizeof(*mptr));
+			
+			mptr->lfd = res;
+			setnonblock(mptr->lfd);
+			mptr->rfd = socket (AF_INET, SOCK_STREAM, 0);
+			if(mptr->rfd == -1)
+			{
+				close(mptr->lfd);
+				free(mptr);
+				goto terml;			
+			}
+			setnonblock(mptr->rfd);
+rr_conn:
+			res = connect(mptr->rfd, &dccptr->sin, dccptr->sinlen);
+			if(res == -1)
+			{
+				switch(errno)
+				{
+					case EINTR:
+						goto rr_conn;
+					case EINPROGRESS:
+						mptr->flags |= 1;
+						break;
+					default:
+						perror("connect");
+						close(mptr->lfd);
+						close(mptr->rfd);
+						goto terml;
+				}
+			}
+			
+			mptr->next = headpdcc;
+			headpdcc = mptr;
+terml:
+			close(dccptr->fd);
+			*parent = dccptr->next;
+			free(dccptr);
+			dccptr=*parent;
+			continue;		
+		}
+donext:
+		parent = &dccptr->next;
+		dccptr = dccptr->next;
+	}	
+}
+
+void initpdcc(fd_set *rfds, fd_set *wfds)
+{
+	struct pdcc *dccptr;
+	for(dccptr = headpdcc; dccptr; dccptr=dccptr->next)
+	{
+		if(sbuf_getlength(&dccptr->rsendq) > 0)
+		{
+			FD_SET(dccptr->rfd, wfds);
+			if(dccptr->rfd > highfd)
+				highfd = dccptr->rfd;
+		}
+		else
+		{
+			FD_SET(dccptr->lfd, rfds);
+			if(dccptr->lfd > highfd)
+				highfd = dccptr->lfd;
+		}
+
+		if(sbuf_getlength(&dccptr->lsendq) > 0)
+		{
+			FD_SET(dccptr->lfd, wfds);
+			if(dccptr->lfd > highfd)
+				highfd = dccptr->lfd;
+		}
+		else
+		{
+			FD_SET(dccptr->rfd, rfds);
+			if(dccptr->rfd > highfd)
+				highfd = dccptr->rfd;
+		}
+	}
+}
+
+
+int dccsend(int fd, struct sbuf *sendq)
+{
+	int res;
+	int length;
+	char *msg;
+
+	
+	while(sbuf_getlength(sendq) > 0)
+	{
+		msg = sbuf_pagemap(sendq, &length);
+		if(msg == NULL)
+			break; /*XXX*/
+		if(length <= 0)
+			break; /*XXX*/
+		res = send(fd, msg, length, 0);
+		if(res == -1)
+		{
+			if(errno == EINTR)
+				continue;
+			if(errno == EAGAIN)
+				break;
+			return 1;
+		}
+		sbuf_delete(sendq, res);
+	}
+	return 0;
+
+}
+
+int dccrecv(int fd, struct sbuf *recvq)
+{
+	int res;
+	for(;;)
+	{
+		res = recv(fd, allbuf, PACKETBUFF, 0);
+		if(res == -1)
+		{
+			if(errno == EINTR)
+				continue;
+			if(errno == EAGAIN)
+				break;
+			return 1;
+		}
+		if(res == 0)
+			return 2;
+
+		sbuf_put(recvq, allbuf, res);
+	}
+	return 0;
+}
+
+
+void chkpdcc(fd_set *rfds, fd_set *wfds)
+{
+	int res;
+	struct pdcc *dccptr;
+	struct pdcc **parent;
+
+
+	parent = &headpdcc;
+	dccptr = headpdcc;
+	while(dccptr)
+	{
+		if(dccptr->lfd >= 0 && FD_ISSET(dccptr->lfd, wfds))
+		{
+			res = dccsend(dccptr->lfd, &dccptr->lsendq);
+			if(res)
+				goto done_err;
+
+		}
+
+		if(dccptr->rfd >= 0 && FD_ISSET(dccptr->rfd, wfds))
+		{
+			res = dccsend(dccptr->rfd, &dccptr->rsendq);
+			if(res)
+				goto done_err;
+		}
+
+
+		if(dccptr->lfd >= 0 && FD_ISSET(dccptr->lfd, rfds))
+		{
+			res = dccrecv(dccptr->lfd, &dccptr->rsendq);
+			if(res == 1)
+				goto done_err;
+			if(res == 2)
+				goto done_leof;
+		}
+	
+		if(dccptr->rfd >= 0 && FD_ISSET(dccptr->rfd, rfds))
+		{
+			res = dccrecv(dccptr->rfd, &dccptr->lsendq);
+			if(res == 1)
+				goto done_err;
+			if(res == 2)
+				goto done_reof;
+		}
+		
+next_dcc:		
+		parent = &dccptr->next;
+		dccptr = dccptr->next;
+		continue;
+done_err:
+		if(dccptr->lfd >= 0)
+			close(dccptr->lfd);
+		if(dccptr->rfd >= 0)
+			close(dccptr->rfd);
+		sbuf_clear(&dccptr->lsendq);
+		sbuf_clear(&dccptr->rsendq);
+
+		*parent = dccptr->next;
+		free(dccptr);
+		dccptr=*parent;
+		continue;
+done_leof:
+		dccsend(dccptr->lfd, &dccptr->lsendq);
+		close(dccptr->lfd);
+		dccptr->lfd = -1;
+
+		if(dccptr->rfd >= 0 && sbuf_getlength(&dccptr->rsendq) > 0)
+			goto next_dcc;
+		goto done_err;
+done_reof:
+		dccsend(dccptr->rfd, &dccptr->rsendq);
+		close(dccptr->rfd);
+		dccptr->rfd = -1;
+
+		if(dccptr->lfd >= 0 && sbuf_getlength(&dccptr->lsendq) > 0)
+			goto next_dcc;
+		goto done_err;
+
+	}
+
+}
 
 void initclient(fd_set *rfds, fd_set *wfds)
 {
@@ -804,18 +1060,34 @@ void initclient(fd_set *rfds, fd_set *wfds)
 char mline[512];
 int scanclient (struct cliententry *cptr, fd_set * rfds)
 {
-	int f,r,m;
+	int f;
 	int res;
 
-	m=0;
-	if(cptr->loc.fd >= 0)
+	if(cptr->loc.fd >= 0 && FD_ISSET(cptr->loc.fd, rfds))
 	{
-		m=(FD_ISSET (cptr->loc.fd, rfds));
-	}
-	if(m)
-	{
-		r = recv (cptr->loc.fd, allbuf, PACKETBUFF, 0);
-		if(r <= 0)
+		res = recv(cptr->loc.fd, allbuf, PACKETBUFF, 0);
+		if(res == -1)
+		{
+			if(errno == EINTR || errno == EAGAIN)
+				goto cr_out;
+
+			if(cptr->flags & FLAGDOCKED)
+			{
+				if(cptr->srv.fd == -1)
+				{
+					close(cptr->loc.fd);
+					cptr->loc.fd = -1;
+					return KILLCURRENTUSER;
+				}
+				close(cptr->loc.fd);
+				cptr->loc.fd=DOCKEDFD;
+				return 0;
+			}
+			else
+				return KILLCURRENTUSER;
+		}
+		
+		if(res == 0)
 		{
 			if(cptr->flags & FLAGDOCKED)
 			{
@@ -825,52 +1097,50 @@ int scanclient (struct cliententry *cptr, fd_set * rfds)
 					cptr->loc.fd = -1;
 					return KILLCURRENTUSER;
 				}
-				close(cptr->loc.fd); /* wipe that dude */
+				close(cptr->loc.fd);
 				cptr->loc.fd=DOCKEDFD;
 				return 0;
 			}
 			else
-			{
 				return KILLCURRENTUSER;
-			}
 		}
-		sbuf_put(&cptr->loc.recvq, allbuf, r);
-	}
+		sbuf_put(&cptr->loc.recvq, allbuf, res);
 
-	for(;;)
-	{
-		res = sbuf_getmsg(&cptr->loc.recvq, mline, 512);
-		if(res <= 0)
-			break;
-		f = handleclient(cptr, CLIENT, res - 1, mline);
-		if(f > 1)
-			return f; 			
+		for(;;)
+		{
+			res = sbuf_getmsg(&cptr->loc.recvq, mline, 512);
+			if(res <= 0)
+				break;
+			f = handleclient(cptr, CLIENT, res - 1, mline);
+			if(f)
+				return f; 			
+		}
 	}
+cr_out:
 
-	if(!(cptr->flags & FLAGCONNECTED))
+	
+	if(cptr->srv.fd >= 0 && FD_ISSET(cptr->srv.fd, rfds))
 	{
-		return 0;
-	}
-	
-	if(cptr->srv.fd == -1)
-	{
-		cptr->flags &= ~FLAGCONNECTED;
-		return 0;
-	}	
-	
-	
-	
-	if(FD_ISSET (cptr->srv.fd, rfds))
-	{
-		r = recv (cptr->srv.fd, allbuf, PACKETBUFF, 0);
-		if (r <= 0)
+		res = recv(cptr->srv.fd, allbuf, PACKETBUFF, 0);
+		if(res == -1)
+		{
+			if(errno == EINTR || errno == EAGAIN)
+				goto sr_out;
+				
+			if(cptr->flags & FLAGKEEPALIVE)
+				return SERVERDIED;
+			else
+				return KILLCURRENTUSER;		
+		}
+		
+		if(res == 0)
 		{
 			if(cptr->flags & FLAGKEEPALIVE)
 				return SERVERDIED;
 			else
 				return KILLCURRENTUSER;
 		}
-		sbuf_put(&cptr->srv.recvq, allbuf, r);
+		sbuf_put(&cptr->srv.recvq, allbuf, res);
 
 		for(;;)
 		{
@@ -878,11 +1148,12 @@ int scanclient (struct cliententry *cptr, fd_set * rfds)
 			if(res <= 0)
 				break;
 			f = handleclient(cptr, SERVER, res - 1, mline);
-			if(f > 1)
+			if(f)
 				return f; 			
 		}
 
 	}
+sr_out:
 	return 0;
 }
 
@@ -1033,7 +1304,9 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 
 int initproxy (confetti * jr)
 {
-	int f;
+	int opt;
+	int res;
+	struct hostent *he;
 
 	s_sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (s_sock < 0)
@@ -1045,8 +1318,23 @@ int initproxy (confetti * jr)
 	muhsin.sin_family = AF_INET;
 	muhsin.sin_port = htons (jr->dport);
 	muhsin.sin_addr.s_addr = INADDR_ANY;
-	f = 1;
-	setsockopt (s_sock, SOL_SOCKET, SO_REUSEADDR, &f, sizeof (f));
+
+	if(*jr->dhost)
+	{
+		res = inet_aton(jr->dhost, &muhsin.sin_addr);
+		if(res == 0)
+		{
+			he = gethostbyname(jr->dhost);
+			if (he)
+				memcpy (&muhsin.sin_addr, he->h_addr, he->h_length);
+			else
+				muhsin.sin_addr.s_addr = INADDR_ANY;
+		}
+	}
+
+
+	opt = 1;
+	setsockopt (s_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof (opt));
 
 	if (bind (s_sock, (struct sockaddr *) &muhsin, sizeof (struct sockaddr_in)) < 0)
 	{
@@ -1073,6 +1361,8 @@ int ircproxy (confetti * jr)
 	for(;;)
 	{
 		initclient(&rfds,&wfds);
+		initpdcc(&rfds, &wfds);
+		initldcc(&rfds);
 		FD_SET(s_sock, &rfds);
 		if ((p = select (highfd + 1, &rfds, &wfds, (fd_set *) 0, NULL)) < 0)
 		{
@@ -1084,6 +1374,7 @@ int ircproxy (confetti * jr)
 		}
 		if (FD_ISSET (s_sock, &rfds))
 		{
+			ninlen = sizeof(nin);
 			nfd = accept (s_sock, (struct sockaddr *) &nin, &ninlen);
 			r=addon_client(nfd,&nin);
 			if(r == -1)
@@ -1091,6 +1382,8 @@ int ircproxy (confetti * jr)
 				close(nfd);
 			}
 		}
+		chkldcc(&rfds);
+		chkpdcc(&rfds,&wfds);
 		chkclient(&rfds,&wfds);
 	}
 	return 0;
