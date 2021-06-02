@@ -10,9 +10,11 @@
 #include "common.h"
 
 #define MAXMOTDLINE 512
+extern int mytoi(char *buf);
 extern void bnckill (int reason);
 extern int bewmstick (void);
 extern int sockprint(int fd,const char *format,...);
+extern int bncmsg(int fd, char *nick, const char *format,...);
 extern int logprint(confetti *jr,const char *format,...);
 extern int passwordokay (char *s, char *pass);
 extern int do_connect (char *vhostname, char *hostname, u_short port, char *uname);
@@ -86,7 +88,19 @@ BUILTIN_COMMAND(cmd_listhost);
 BUILTIN_COMMAND(cmd_keepalive);
 BUILTIN_COMMAND(cmd_rawecho);
 BUILTIN_COMMAND(cmd_bmsg);
-cmdstruct bnccmds[] =
+BUILTIN_COMMAND(cmd_prefixrawecho);
+
+BUILTIN_COMMAND(srv_nick);
+BUILTIN_COMMAND(srv_tellnick);
+
+cmdstruct serverbnccmds[] =
+{
+	{ "NICK", srv_nick, FLAGCONNECTED, FLAGNONE },
+	{ "004", srv_tellnick, FLAGCONNECTED, FLAGNONE },
+	{NULL, NULL, 0,0}
+};
+
+cmdstruct clientbnccmds[] =
 {
 	{ "QUIT", cmd_quit, FLAGNONE, FLAGCONNECTED },
 	{ "PASS", cmd_pass, FLAGNONE, FLAGCONNECTED | FLAGPASS },
@@ -109,6 +123,7 @@ cmdstruct bnccmds[] =
  	{ "KEEPALIVE", cmd_keepalive, FLAGPASS, FLAGNONE },
  	{ "RAWECHO", cmd_rawecho, FLAGPASS, FLAGNONE },
  	{ "BMSG", cmd_bmsg, FLAGPASS, FLAGNONE },
+ 	{ "PRE", cmd_prefixrawecho , FLAGPASS | FLAGBASED, FLAGNONE },
 	{ NULL, NULL, 0, 0 }
 };
 
@@ -129,6 +144,30 @@ int remnl (char *buf, int size)
 		}
 	}
 	return p;
+}
+
+int getnickuserhost(char **argv,char *buf,char *fix)
+{
+	int p,c;
+	c=0;
+	argv[0]=buf;
+
+	for(p=0;buf[p];p++)
+	{
+		if(buf[p] == '!')
+		{
+			buf[p]='\0';
+			fix[c++]='!';
+			argv[1]=&buf[p+1];
+		}
+		if(buf[p] == '@')
+		{
+			buf[p]='\0';
+			fix[c++]='@';
+			argv[2]=&buf[p+1];
+		}
+	}
+	return c;
 }
 
 int irc_connect(struct cliententry *list_ptr, char *server, u_short port, char *pass)
@@ -211,14 +250,24 @@ int irc_connect(struct cliententry *list_ptr, char *server, u_short port, char *
 
 
 
-int handlepclient (struct cliententry *list_ptr, int pargc, char **pargv)
+int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **pargv, char *prefix)
 {
 	int p,f,r,w;
 	FILE *motdf;
+	cmdstruct *bnccmds;
 
 	f=0;
 	p=0;
 	w=1;
+	if(fromwho == CLIENT)
+	{
+		bnccmds=clientbnccmds;
+	}
+	else
+	{
+		bnccmds=serverbnccmds;
+	}
+
 	while(bnccmds[p].name != NULL)
 	{
 		if(!strcasecmp(pargv[0],bnccmds[p].name))
@@ -229,7 +278,7 @@ int handlepclient (struct cliententry *list_ptr, int pargc, char **pargv)
 				if( (bnccmds[p].flags_off & ~list_ptr->flags) == bnccmds[p].flags_off)
 				{
 					w=0;
-					f=bnccmds[p].func(list_ptr,pargc,pargv);
+					f=bnccmds[p].func(list_ptr, prefix, pargc, pargv);
 					break;
 				}
 			}
@@ -269,6 +318,7 @@ int handlepclient (struct cliententry *list_ptr, int pargc, char **pargv)
 
 		}
 		r=sockprint(list_ptr->fd, "NOTICE AUTH :Welcome to BNC " VERSION ", the irc proxy\n");
+
 		if(r < 0)
 		{
 			return KILLCURRENTUSER;
@@ -317,6 +367,61 @@ int handlepclient (struct cliententry *list_ptr, int pargc, char **pargv)
 	return w;
 }
 
+BUILTIN_COMMAND(srv_nick)
+{
+	int p,repc,c,f;
+	char repv[3];
+	char *nuh[3];
+	char *arf="UNKNOWN";
+	nuh[0]=arf;
+	nuh[1]=arf;
+	nuh[2]=arf;
+	
+	if(pargc < 2)
+	{
+		return 0;
+	}
+	if(prefix == NULL)
+	{
+		return 0;
+	}
+	c=strlen(prefix);
+	
+	repc = getnickuserhost(nuh, prefix, repv);
+	
+	
+	if(!strncasecmp(list_ptr->nick, nuh[0],NICKLEN))
+	{
+		strncpy( list_ptr->nick, pargv[1], NICKLEN);
+		list_ptr->nick[NICKLEN]='\0';
+	}
+	f=0;
+	for(p=0;p<c;p++)
+	{
+		if( prefix[p] == '\0' )
+		{
+			if(repc > 0)
+			{
+				prefix[p]=repv[f++];
+				repc--;
+			}
+		}
+	}
+	
+ 	return FORWARDCMD;
+	
+}
+
+BUILTIN_COMMAND(srv_tellnick)
+{
+	if(pargc < 2)
+	{
+		return 0;
+	}
+	strncpy(list_ptr->nick,pargv[1],NICKLEN);
+	list_ptr->nick[NICKLEN]='\0';
+	return FORWARDCMD;
+}
 
 
 
@@ -341,6 +446,23 @@ BUILTIN_COMMAND(cmd_rawecho)
 	return 0;
 }
 
+BUILTIN_COMMAND(cmd_prefixrawecho)
+{
+	int r;
+	if(pargc < 2)
+		return 0;
+	if(prefix == NULL)
+	{
+		r=sockprint(list_ptr->fd,":%s!%s@%s %s\n", list_ptr->nick, list_ptr->uname, list_ptr->fromip, pargv[1]);
+	}
+	else
+	{
+		r=sockprint(list_ptr->fd,":%s %s\n", prefix, pargv[1]);
+	}
+	if(r < 0)
+		return KILLCURRENTUSER;
+	return 0;
+}
 
 
 BUILTIN_COMMAND(cmd_nick)
@@ -427,7 +549,7 @@ BUILTIN_COMMAND(cmd_pass)
 			list_ptr->sport=jack->cport;
 			if(sargc > 2) /* contains port */
 			{
-				list_ptr->sport=atoi(sargv[2]);
+				list_ptr->sport=mytoi(sargv[2]);
 			}
 			if(sargc > 3) /* contains server pass */
 			{
@@ -540,7 +662,7 @@ BUILTIN_COMMAND(cmd_conn)
 	}
 	if (pargc > 2)
 	{
-		cport = atoi (pargv[2]);
+		cport = mytoi (pargv[2]);
 	}
 	else
 	{
@@ -750,7 +872,7 @@ BUILTIN_COMMAND(cmd_bmsg)
 	{
 		return 0;
 	}
-	p = atoi (pargv[1]);
+	p = mytoi (pargv[1]);
 	if(p < 1)
 	{
 		r=sockprint(list_ptr->fd, "NOTICE AUTH :invalid bmsg arguments\n");
@@ -791,7 +913,7 @@ BUILTIN_COMMAND(cmd_bkill)
 	{
 		return 0;
 	}
-	p = atoi (pargv[1]);
+	p = mytoi (pargv[1]);
 	if(p < 1)
 	{
 		r=sockprint(list_ptr->fd, "NOTICE AUTH :invalid bkill argument\n");
@@ -846,12 +968,12 @@ BUILTIN_COMMAND(cmd_addhost)
 	{
 		return 0;
 	}
-	if (atoi (pargv[1]) > 2)
+	if (mytoi (pargv[1]) > 2)
 	{
 		return 0;
 	}
 	na = malloc (sizeof (accesslist));
-	na->type = atoi (pargv[1]);
+	na->type = mytoi (pargv[1]);
 	strncpy (na->addr, pargv[2], HOSTLEN);
 	na->addr[HOSTLEN]='\0';
 	na->next = NULL;

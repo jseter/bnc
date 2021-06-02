@@ -4,12 +4,63 @@ MYPID=$$
 TMPFILE=.bnc$MYPID.tmp
 RSLFILE=.bnc$MYPID.rsl
 VHTFILE=.bnc$MYPID.vht
-BSVERSION="0.2 for BNC2.6.0"
+BSVERSION="0.3 for BNC2.6.4"
+SAVEFILE=./bnc.conf
 
 bsclean()
 {
   rm -f $TMPFILE $RSLFILE $VHTFILE
   exit $1
+}
+
+saveit()
+{
+echo "Writing your configuration to $SAVEFILE"
+cat << EOF > $TMPFILE
+#!/home/myhome/bnc
+# BNCSetup $BSVERSION by IceWizard and pharos
+# automaticly generated configuration file.
+# edit the first line and chmod +x this file if you like to load bnc
+# by running its .conf file
+#               Here are additional options you may add:
+# C:6667                        Default Irc Server Port to Connect to
+# X:default.vhost.com           Default Virtual Host to Use
+# V:another.vhost.com           Other Vhosts That Can Be Used
+# V:different.vhost.com          As Many Vhosts as You Want
+# P:pid.bnc                     Name of PID File
+#                                *NOTE PID file is required if bnc is to be
+#                                *used with crontab
+# L:bnc.log                     Name of Log File
+# W:1                           enable dynamic idents on servers with
+#                                identwd installed
+# A:1:*.addy.net                Allow list of ip addresses that can use BNC
+S:$SUPERPASS
+D:$BNCPORT:$MAXUSERS:$BNCPASS
+
+EOF
+
+cat $TMPFILE $VHTFILE > $SAVEFILE
+echo "Finished! You may now edit $SAVEFILE to make any special changes"
+
+bsclean 0
+}
+
+altconf()
+{
+  echo "##" > $VHTFILE
+  echo "Running alt configuration tool"
+  echo -n "Port to listen on> " 
+  read BNCPORT
+  echo "How many users would you like to be allowed on BNC at the same time?"
+  echo "Please note, if you would like to allow unlimited users, enter a 0"
+  echo -n "> "
+  read MAXUSERS
+  echo -n "Pick a password >"
+  read BNCPASS
+  echo -n "Pick a password for the superuser >"
+  read SUPERPASS
+  saveit
+
 }
 
 if ! [ -e ./mkpasswd ]
@@ -40,6 +91,7 @@ if [ x$ERRORLEVEL != x0 ]
 then
   echo "You appear to not have the program named dialog"
   echo "This script depends on it heavily"
+  altconf
   bsclean 0
 fi
 
@@ -322,31 +374,5 @@ then
   mv $SAVEFILE "$SAVEFILE".old
 fi
 
-echo "Writing your configuration to $SAVEFILE"
-cat << EOF > $TMPFILE
-#!/home/myhome/bnc
-# BNCSetup $BSVERSION by IceWizard and pharos
-# automaticly generated configuration file.
-# edit the first line and chmod +x this file if you like to load bnc
-# by running its .conf file
-#               Here are additional options you may add:
-# C:6667                        Default Irc Server Port to Connect to
-# X:default.vhost.com           Default Virtual Host to Use
-# V:another.vhost.com           Other Vhosts That Can Be Used
-# V:different.vhost.com          As Many Vhosts as You Want
-# P:pid.bnc                     Name of PID File
-#                                *NOTE PID file is required if bnc is to be
-#                                *used with crontab
-# L:bnc.log                     Name of Log File
-# W:1                           enable dynamic idents on servers with
-#                                identwd installed
-# A:1:*.addy.net                Allow list of ip addresses that can use BNC
-S:$SUPERPASS
-D:$BNCPORT:$MAXUSERS:$BNCPASS
+saveit
 
-EOF
-
-cat $TMPFILE $VHTFILE > $SAVEFILE
-echo "Finished! You may now edit $SAVEFILE to make any special changes"
-
-bsclean 0

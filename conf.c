@@ -2,10 +2,27 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <ctype.h>
 
 #include "common.h"
 unsigned int req = 0;
 
+
+int mytoi(char *buf)
+{
+	int acum;
+	int p;
+	acum=0;
+	for(p=0;buf[p];p++)
+	{
+		if( isdigit( buf[p] ))
+		{
+			acum*=10;
+			acum+= ( buf[p] - '0' );
+		}
+	}
+	return acum;
+}
 
 void add_access (confetti * jr, accesslist * a)
 {
@@ -36,7 +53,7 @@ int confoption (confetti * jr, int pargc, char **pargv)
       {
 	if (pargc < 2)
 	  return 0;
-	jr->cport = atoi (pargv[1]);
+	jr->cport = mytoi (pargv[1]);
 	if (jr->cport < 1025)
 	  jr->cport = 1025;
 	else if (jr->cport > 65534)
@@ -49,8 +66,8 @@ int confoption (confetti * jr, int pargc, char **pargv)
 	if (pargc < 3)
 	  break;
 	req |= 1;
-	jr->dport = atoi (pargv[1]);
-	jr->maxusers = atoi (pargv[2]);
+	jr->dport = mytoi (pargv[1]);
+	jr->maxusers = mytoi (pargv[2]);
 	if (pargc > 3)
 	{
 	  strncpy (jr->dpass, pargv[3], PASSLEN);
@@ -132,7 +149,7 @@ int confoption (confetti * jr, int pargc, char **pargv)
       {
 	if (pargc < 2)
 	  break;
-	jr->identwd = atoi (pargv[1]);
+	jr->identwd = mytoi (pargv[1]);
 	return 0;
       }
     case 'a':
@@ -142,15 +159,29 @@ int confoption (confetti * jr, int pargc, char **pargv)
 
 	if (pargc < 3)
 	  break;
-	if (atoi (pargv[1]) > 2)
+	if (mytoi (pargv[1]) > 2)
 	  break;
 	na = malloc (sizeof (accesslist));
-	na->type = atoi (pargv[1]);
+	na->type = mytoi (pargv[1]);
 	strncpy (na->addr, pargv[2], HOSTLEN);
 	na->addr[HOSTLEN]='\0';
 	na->next = NULL;
 	add_access (jr, na);
 	return 0;
+      }
+    case 'B':
+    case 'b':
+      {
+        if(pargc < 2)
+        {
+          return 0;
+        }
+        jr->mtype=mytoi(pargv[1]);
+        if(jr->mtype > 1)
+          jr->mtype=1;
+         
+        printf("mtype is %i\n",jr->mtype);
+    	return 0;
       }
     case 'i':
     case 'I':

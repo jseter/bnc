@@ -1,9 +1,26 @@
+2.6.4
+(1) Coded my own Atoi trying to solve some weird bug where ppl would put a
+      number in there conf file and get completely different results.
+(2) Moved around the identwd code, added some bug fixes.  Should stop a
+      crash bug on users on an nfs system.
+(3) Fixed a shutdown bug related to clients that leave before bnc knows who
+      they are by ignoring SIGPIPE.
+(4) Added a feature to try to guess why the SELECTERR happens, maybe we
+      won't get as many shutdowns related to that.
+(5) Changed bncsetup, little more able to live if you don't have dialog
+(6) BNC now watches your nickname, experimental code to help developing irc
+      docking, maybe someday you can leave your nick on the net while you
+      leave.
+(7) Wow, some people do read the README file, updated it mildly to reflect
+      current program status.
+
 2.6.2
 (1) Fixed delinking bug that was bouncing cpu usage to 100% (ick)
 (2) made bnc able to handle commands, while on irc.
 (3) cleanup, memory reductions
 (4) added BMSG as a test level command, don't expect much from it at this
       stage
+(5) added PRE as a test level command. (prefixed raw echo)
 
 2.6.0
 (1) Added more verbose /quote help

@@ -4,6 +4,7 @@
 
 #define KILLCURRENTUSER 100
 #define SERVERDIED 300
+#define FORWARDCMD 1
 
 #define BUFSIZE 512
 #define PASSLEN 16
@@ -22,6 +23,9 @@
 #define FLAGAUTOCONN 32
 #define FLAGCONNECTED 64
 #define FLAGKEEPALIVE 128
+
+#define CLIENT 0
+#define SERVER 1
 
 
 struct cliententry
@@ -49,12 +53,12 @@ struct cliententry
 
 };
 
-#define BUILTIN_COMMAND(x) int x(struct cliententry *list_ptr, int pargc, char **pargv)
+#define BUILTIN_COMMAND(x) int x(struct cliententry *list_ptr, char *prefix, int pargc, char **pargv)
 
 typedef struct
 {
    char *name;
-   int (*func)(struct cliententry *, int, char **);
+   int (*func)(struct cliententry *, char *, int, char **);
    unsigned int flags_on;
    unsigned int flags_off;
 } cmdstruct;
@@ -92,6 +96,7 @@ typedef struct
     char vhostdefault[HOSTLEN+1];
     char spass[PASSLEN+1];
     int usemotd;
+    int mtype;
     char motdf[256];
 } confetti;
 

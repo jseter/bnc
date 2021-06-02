@@ -135,6 +135,7 @@ int main (int argc, char **argv)
 
 	memset (&bncconf, 0, sizeof (bncconf));
 	bncconf.cport = 6667;
+	bncconf.mtype=1;
 	
 	pars = strrchr (argv[0], '/');
 	if (pars == NULL)
@@ -188,6 +189,7 @@ int main (int argc, char **argv)
 		bnckill (tmps);
 	}
 	signal (SIGHUP, SIG_IGN);
+	signal (SIGPIPE,SIG_IGN);
 	
 	switch (tmps = fork ())
 	{

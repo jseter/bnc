@@ -1,7 +1,7 @@
 OBJS = bnc.o conf.o server.o cmds.o
 LIBS = @LIBS@
 OPTS = -O3
-COPT = -DVERSION='"v2.6.2"' -Wall
+COPT = -DVERSION='"v2.6.4"' -Wall
 OOPT =
 STRIP = strip
 CC = gcc

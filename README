@@ -6,9 +6,9 @@
    \  \_______/  \  \__\\  \ __\  \  \_______\
     \/_______/    \/__/   \/__/    \/_______/   IRC PROXY
    
-BNC 2.6.2 (c) 1998-99 by James Seter AKA Pharos on efnet
+BNC 2.6.4 (c) 1998-99 by James Seter AKA Pharos on efnet
 Site:
-  http://bnc.refract.com
+  http://bnc.dragondata.com
 Nag:
   Please donate, please donate, please donate
   information about donation at bottom.
@@ -243,10 +243,18 @@ BNC                             IRC Proxy Daemon              April 1998
 
    Normal users commands
    ---------------------
+   PASS PASSWORD[:SERVER:PORT:SERVERPASS]
+     Some clients such as Mirc allows you to type /server blah password
+     pass is a feature that allows you to autoconnect to a real server
+     without using CONN inside the pass command. 
+     /server irc.blah   password:irc.irc.com:6668
    CONN <server address> [port] [pass]
      This will initialize a connection to the real irc server and begin
      the two-way communication between you and the real irc server,
      ending the bnc command session.
+   KEEPALIVE
+     turns on the keepalive function, instead of killing your connection
+     when irc dies it resumes to BNC server mode.
    VIP [new virtual host]
      Issuing VIP alone will list all the V lines included in the
      configuration file.  These lines are not required to use an address
@@ -275,6 +283,8 @@ BNC                             IRC Proxy Daemon              April 1998
      end the daemons running process.
    BDIE
      This command is more friend version of DIE.
+   BMSG
+     Experimental inter-bnc chat.
 
 James Seter                                                     [PAGE 5]
 

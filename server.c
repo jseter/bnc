@@ -23,7 +23,7 @@ extern int h_errno;
 extern char logbuf[];
 extern int bnclog (confetti * jr, char *logbuff);
 extern void add_access (confetti *, accesslist *);
-extern int handlepclient (struct cliententry *list_ptr, int pargc, char **pargv);
+extern int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **pargv, char *prefix);
 extern void bnckill (int reason);
 extern int remnl (char *buf, int size);
 
@@ -47,6 +47,12 @@ unsigned char buffer[PACKETBUFF+1];
 struct cliententry *headclient;
 confetti *jack;
 
+char *hmsg[]=
+{
+	"NOTICE AUTH :",
+	":bnc!bnc@bnc.com PRIVMSG %s :",
+	NULL
+};
 
 
 #ifndef HAVE_SNPRINTF
@@ -116,6 +122,22 @@ int sockprint(int fd,const char *format,...)
   p = send(fd, buffer, p, 0);
   return p;
 }
+
+int bncmsg(int fd, char *nick, const char *format,...)
+{
+  int p, c;
+  va_list ap;
+  
+  c=snprintf(buffer, PACKETBUFF, hmsg[jack->mtype], nick);
+  va_start(ap,format);
+  
+  p = vsnprintf(&buffer[c], PACKETBUFF - c, format, ap);
+  va_end(ap);
+  p = send(fd, buffer, p+c, 0);
+  return p;
+}
+
+
 
 int logprint(confetti *jr,const char *format,...)
 {
@@ -274,28 +296,28 @@ int passwordokay (char *s, char *pass)
 
 int connokay (struct sockaddr_in sa, confetti * jr)
 {
-  struct hostent *hp = gethostbyaddr ((char *) &sa.sin_addr, sizeof (sa.sin_addr), AF_INET);
+	struct hostent *hp = gethostbyaddr ((char *) &sa.sin_addr, sizeof (sa.sin_addr), AF_INET);
 
-  accesslist *na;
+	accesslist *na;
 
-  logprint(jack, "Connection from %s", inet_ntoa (sa.sin_addr));
+	logprint(jack, "Connection from %s", inet_ntoa (sa.sin_addr));
 
-  if (!jr->has_alist)
-    return 1;
-  for (na = jr->alist; na; na = na->next)
-  {
-    if (na->type == 1)
-    {
-      if (!match (inet_ntoa (sa.sin_addr), na->addr))
-	return 1;
-    }
-    else if (na->type == 2 && hp)
-    {
-      if (!match (hp->h_name, na->addr))
-	return 1;
-    }
-  }
-  return 0;
+	if (!jr->has_alist)
+		return 1;
+	for (na = jr->alist; na; na = na->next)
+	{
+		if (na->type == 1)
+		{
+			if (!match (inet_ntoa (sa.sin_addr), na->addr))
+			return 1;
+		}
+		else if (na->type == 2 && hp)
+		{
+			if (!match (hp->h_name, na->addr))
+			return 1;
+		}
+	}
+	return 0;
 }
 
 
@@ -378,6 +400,57 @@ char *gethost (struct in_addr *addr)
 	return inet_ntoa (*addr);
 }
 
+int identwd_lock(struct sockaddr_in *sin, int port)
+{
+	FILE *fp = NULL;
+	struct passwd *pw;
+	char filename[1024];
+	
+	pw = getpwuid (getuid ());
+	if(pw == NULL)
+	{
+		return -1;
+	}
+	sprintf (filename, "%s/.identwd/%s.%i.LOCK",
+	pw->pw_dir, inet_ntoa (sin->sin_addr), port);
+	fp = fopen (filename, "w");
+	if (fp)
+	{
+		fprintf (fp, "WAIT\n");
+		fclose(fp);
+		return 0;
+	}
+	return -1;
+}
+
+int identwd_unlock(int s, struct sockaddr_in *sin, int port, char *uname)
+{
+	FILE *fp = NULL;
+	struct passwd *pw;
+	char filename[1024];
+	
+	pw = getpwuid(getuid());
+	if(pw == NULL)
+	{
+		return -1;
+	}
+	sprintf (filename, "%s/.identwd/%s.%i.LOCK",
+	pw->pw_dir, inet_ntoa (sin->sin_addr), port);
+	fp = fopen (filename, "w");
+	if (fp)
+	{
+		int len = sizeof (struct sockaddr_in);
+		struct sockaddr_in mysa;
+
+		getsockname (s, (struct sockaddr *) &mysa, &len);
+		fprintf (fp, (char *) "%s %i %s\n",
+		(char *) inet_ntoa (mysa.sin_addr),
+		(u_short) ntohs (mysa.sin_port), uname);
+		fclose(fp);
+		return 0;
+	}
+	return -1;
+}
 
 int do_connect (char *vhostname, char *hostname, u_short port, char *uname)
 {
@@ -440,18 +513,7 @@ int do_connect (char *vhostname, char *hostname, u_short port, char *uname)
 	}
 	if (jack->identwd)
 	{
-		FILE *fp = NULL;
-		struct passwd *pw = getpwuid (getuid ());
-		char filename[1024];
-
-		sprintf (filename, "%s/.identwd/%s.%i.LOCK",
-		pw->pw_dir, inet_ntoa (sin.sin_addr), port);
-		fp = fopen (filename, "w");
-		if (fp)
-		{
-			fprintf (fp, "WAIT\n");
-			fclose(fp);
-		}
+		identwd_lock(&sin, port);
 	}
 
 	if (connect (s, (struct sockaddr *) &sin, sizeof (sin)) < 0)
@@ -461,24 +523,7 @@ int do_connect (char *vhostname, char *hostname, u_short port, char *uname)
 	}
 	if (jack->identwd)
 	{
-		FILE *fp = NULL;
-		struct passwd *pw = getpwuid (getuid ());
-		char filename[1024];
-
-		sprintf (filename, "%s/.identwd/%s.%i.LOCK",
-		pw->pw_dir, inet_ntoa (sin.sin_addr), port);
-		fp = fopen (filename, "w");
-		if (fp)
-		{
-			int len = sizeof (struct sockaddr_in);
-			struct sockaddr_in mysa;
-
-			getsockname (s, (struct sockaddr *) &mysa, &len);
-			fprintf (fp, (char *) "%s %i %s\n",
-			(char *) inet_ntoa (mysa.sin_addr),
-			(u_short) ntohs (mysa.sin_port), uname);
-			fclose(fp);
-		}
+		identwd_unlock(s, &sin, port, uname);
 	}
 	return s;
 }
@@ -489,24 +534,34 @@ int do_connect (char *vhostname, char *hostname, u_short port, char *uname)
  * also expects a \0 to be prepended.
  */ 
 
-int handleclient (struct cliententry *list_ptr, int buflen, char *buf)
+int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *buf)
 {
 	int p, f, r;
+	char *prefix;
 	char *pargv[10];
 	char repv[10];
 	
 	int pargc;
 	int repc;
 	int iswhite;
-	p=0;
 	f=0;
 
+        prefix=NULL;
 	pargv[0]=buf;
 	pargc=1;
 	repc=0;
 	
 	iswhite=0; 
-	for(p=0;p<buflen;p++)
+	p=0;
+
+	if(buf[p] == ':')
+	{
+		prefix=&buf[p+1];
+		pargc=0;
+		p++;
+	}
+	
+	for(;p<buflen;p++)
 	{
 		if(iswhite) /* inside the whitespace */
 		{
@@ -529,7 +584,7 @@ int handleclient (struct cliententry *list_ptr, int buflen, char *buf)
 		}
 		else
 		{
-			if(buf[p] == ' ' )
+		        if(buf[p] == ' ' )
 			{
 				repv[repc++]=buf[p]; /* this shouldn't ever overflow */
 				buf[p]='\0';
@@ -537,7 +592,7 @@ int handleclient (struct cliententry *list_ptr, int buflen, char *buf)
 			}
 		}
 	}
-	f=handlepclient(list_ptr, pargc, pargv);
+ 	f=handlepclient(list_ptr, fromwho, pargc, pargv, prefix);
 	if((list_ptr->flags & FLAGCONNECTED) && (f == 1))
 	{
 		f=0;
@@ -552,7 +607,14 @@ int handleclient (struct cliententry *list_ptr, int buflen, char *buf)
 				}
 			}
 		}
-		r = sockprint(list_ptr->sfd,"%s\n",buf);
+		if(fromwho == CLIENT)
+		{
+			r = sockprint(list_ptr->sfd,"%s\n",buf);
+		}
+		else
+		{
+			r = sockprint(list_ptr->fd,"%s\n",buf);
+		}
 		if(r < 1)
 		{
 			return SERVERDIED;
@@ -627,7 +689,7 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 					list_ptr->blen=0;
 					if(c > 0 )
 					{
-						f = handleclient (list_ptr, c, list_ptr->biff);
+						f = handleclient (list_ptr, CLIENT, c, list_ptr->biff);
 						if( f > 1)
 						{
 							return f;
@@ -665,11 +727,60 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 				return KILLCURRENTUSER;
 			}
 		}
-		r=send (list_ptr->fd, allbuf, r, 0);
+		/* new shiz */
+		for (p = 0; p < r; p++)
+		{
+			c=allbuf[p];
+			switch(c)
+			{
+				case '\0':
+				{
+					break;
+				}
+				case '\r':
+				case '\n':
+				{
+				        if(list_ptr->slen < BUFSIZE)
+				        {
+						list_ptr->siff[list_ptr->slen]=0;
+						c=list_ptr->slen;
+					}
+					else
+					{
+						list_ptr->siff[BUFSIZE-1]=0;
+						c=BUFSIZE-1;
+					}
+					list_ptr->slen=0;
+					if(c > 0 )
+					{
+						f = handleclient (list_ptr, SERVER, c, list_ptr->siff);
+						if( f > 1)
+						{
+							return f;
+						}
+					}
+					break;
+				}
+				default:
+				{
+				        if(list_ptr->slen < (BUFSIZE-1))
+				        {
+					  list_ptr->siff[list_ptr->slen++]=c;
+					}
+					break;
+				}
+			}
+		}	
+		/* end of new shiz */
+		
+		
+/*		r=send (list_ptr->fd, allbuf, r, 0);
 		if(r < 0)
 		{
 			return KILLCURRENTUSER;
 		}
+*/
+
 	}
 	return 0;
 }
@@ -710,7 +821,7 @@ struct cliententry *chkclient (struct cliententry *list_ptr, fd_set * nation)
 
 void doclient(struct cliententry *list_ptr, fd_set * nation)
 {
-	int citizen, p;
+	int citizen, p,r;
 	struct in_addr faddr;
 	struct cliententry *bob;
 
@@ -728,7 +839,12 @@ void doclient(struct cliententry *list_ptr, fd_set * nation)
 				}
 			}
 			p = sizeof (muhsin);
-			getpeername (citizen, (struct sockaddr *) &muhsin, &p);
+			r=getpeername (citizen, (struct sockaddr *) &muhsin, &p);
+			if(r)
+			{
+				close(citizen);
+				return;
+			}
 			if (!connokay (muhsin, jack))
 			{
 				close (citizen);
@@ -777,6 +893,56 @@ void doclient(struct cliententry *list_ptr, fd_set * nation)
 		
 }
 
+
+int findbad(struct cliententry *list_ptr, fd_set * nation)
+{
+	int p;
+
+	struct timeval thearf;
+	thearf.tv_sec=0;
+	thearf.tv_usec=0;
+	while (list_ptr != NULL)
+	{
+		FD_ZERO(nation);
+		FD_SET(list_ptr->fd, nation);
+		
+		if((p=select(list_ptr->fd+1, nation, (fd_set *) 0, (fd_set *) 0, &thearf )) < 0)
+		{
+			if(errno == EBADF)
+			{ /* this is the bad boy. */
+				if(list_ptr->prev == NULL)
+					headclient=list_ptr->next;
+				else
+					list_ptr->prev->next=list_ptr->next;
+					
+				wipeclient(list_ptr);
+				return 1;
+			}
+		
+		}
+		
+		if(list_ptr->flags & FLAGCONNECTED)
+		{
+			if( list_ptr->sfd > -1)
+			{
+				FD_ZERO(nation);
+				FD_SET(list_ptr->sfd, nation);
+				if((p=select(list_ptr->fd+1, nation, (fd_set *) 0, (fd_set *) 0, &thearf)) < 0)
+				{
+					if(errno == EBADF)
+					{ /* this is the bad boy. */
+						close(list_ptr->sfd);
+						list_ptr->sfd=-1;
+						return 1;
+					}
+				}
+			}	
+		}
+		list_ptr = list_ptr->next;
+	}
+	return 0;
+}
+
 int initproxy (confetti * jr)
 {
   int f;
@@ -817,7 +983,14 @@ int ircproxy (confetti * jr)
     initclient(headclient, &nation);
     if ((p = select (highfd + 1, &nation, (fd_set *) 0, (fd_set *) 0, NULL)) < 0)
     {
-      bnckill (SELECTERR);
+    	if(errno == EBADF)
+    	{
+    		p=findbad(headclient,&nation);
+    	}
+    	if(errno == ENOMEM)
+    	{
+		bnckill (SELECTERR);
+	}
     }
     doclient (headclient, &nation);
   }
