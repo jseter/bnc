@@ -88,12 +88,12 @@ server(int s)
 			strncat(buffer,tm,1);		
 		}
 		if(!strncasecmp(buffer, "USER ", 5)){
-			strcpy(user, buffer);
+			strncpy(user, buffer,1023);
 			u=0;
 		}
 		else
 		if(!strncasecmp(buffer, "NICK ", 5)){
-			strcpy(nick,buffer);
+			strncpy(nick,buffer,1023);
 			nck=NULL;
 			strtok(nick," ");
 			nck=strtok(NULL," \n\r");
@@ -106,7 +106,7 @@ server(int s)
 		}
 		else                                       
 	        if(!strncasecmp(buffer, "PASS ", 5)){
-	                strcpy(myserver,buffer);
+	                strncpy(myserver,buffer,25);
 	                pass=NULL;
 	                strtok(myserver," ");
 	                pass=strtok(NULL," \n\r");
@@ -159,7 +159,7 @@ server(int s)
 				server = strtok(NULL, " \n\r");
 				if(!server)
 					continue;
-				strcpy(myserver, server);
+				strncpy(myserver, server,1023);
 				port = strtok(NULL, " \n\r");
 				if(!port) {
 					myport=dp;
@@ -173,7 +173,7 @@ server(int s)
 				else
 				{
 					up = 1;
- 					strcpy(spast,spass);
+ 					strncpy(spast,spass,29);
 					
 				}
 				
