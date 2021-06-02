@@ -153,6 +153,7 @@ int main (int argc, char **argv)
 	printf ("--Using conf file %s\n", conffile);
 
 	memset (&bncconf, 0, sizeof (bncconf));
+	bncconf.logfile = NULL;
 	bncconf.cport = 6667;
 	bncconf.mtype=1;
 	

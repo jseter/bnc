@@ -90,7 +90,6 @@ struct cliententry
 
 
 
-#define BUILTIN_COMMAND(x) int x(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 
 typedef struct
 {

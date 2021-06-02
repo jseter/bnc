@@ -7,7 +7,14 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
+#ifdef TIME_WITH_SYS_TIME
+#include <time.h>
+#endif
+#else
+#include <time.h>
+#endif
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -104,6 +111,8 @@ int logprint(confetti *jr, const char *format, ...)
 	va_list ap;
 	va_start(ap, format);
 
+	if(jr->logfile == NULL)
+		return 0;
 
 	time(&clk);
 	tp = localtime(&clk);
@@ -656,7 +665,7 @@ int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass
 		rsin4.sin_family = AF_INET;
 		rsin4.sin_port = htons (port);	
 	}
-	else /* if(rfamily = AF_INET6) */
+	else /* if(rfamily == AF_INET6) */
 	{
 		rsin6.sin6_family = AF_INET6;
 		rsin6.sin6_port = htons(port);

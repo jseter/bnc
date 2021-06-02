@@ -78,42 +78,43 @@ char *helplista[] =
 
 
 
-BUILTIN_COMMAND(cmd_quit);
-BUILTIN_COMMAND(cmd_nick);
-BUILTIN_COMMAND(cmd_pass);
-BUILTIN_COMMAND(cmd_user);
-BUILTIN_COMMAND(cmd_help);
-BUILTIN_COMMAND(cmd_main);
-BUILTIN_COMMAND(cmd_conn);
-BUILTIN_COMMAND(cmd_ident);
-BUILTIN_COMMAND(cmd_vn);
-BUILTIN_COMMAND(cmd_vdf);
-BUILTIN_COMMAND(cmd_vip);
-BUILTIN_COMMAND(cmd_who);
-BUILTIN_COMMAND(cmd_die);
-BUILTIN_COMMAND(cmd_bdie);
-BUILTIN_COMMAND(cmd_bkill);
-BUILTIN_COMMAND(cmd_addhost);
-BUILTIN_COMMAND(cmd_listhost);
-BUILTIN_COMMAND(cmd_keepalive);
-BUILTIN_COMMAND(cmd_rawecho);
-BUILTIN_COMMAND(cmd_bmsg);
-BUILTIN_COMMAND(cmd_prefixrawecho);
-BUILTIN_COMMAND(cmd_dock);
-BUILTIN_COMMAND(cmd_resume);
-BUILTIN_COMMAND(cmd_resumealive);
-BUILTIN_COMMAND(cmd_dumpll);
-BUILTIN_COMMAND(cmd_bypass);
-BUILTIN_COMMAND(cmd_privmsg);
+int cmd_quit(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_nick(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_pass(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_user(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_help(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_main(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_conn(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_ident(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_vn(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_vdf(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_vip(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_who(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_die(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_bdie(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_bkill(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_addhost(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_listhost(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_keepalive(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_rawecho(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_bmsg(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_prefixrawecho(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_dock(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_resume(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_resumealive(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_dumpll(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_bypass(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int cmd_privmsg(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
 
-BUILTIN_COMMAND(srv_nick);
-BUILTIN_COMMAND(srv_tellnick);
-BUILTIN_COMMAND(srv_join);
-BUILTIN_COMMAND(srv_kick);
-BUILTIN_COMMAND(srv_part);
-BUILTIN_COMMAND(srv_ping);
-BUILTIN_COMMAND(srv_endmotd);
-BUILTIN_COMMAND(srv_privmsg);
+int srv_nick(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_tellnick(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_join(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_kick(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_part(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_quit(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_ping(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_endmotd(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
+int srv_privmsg(struct cliententry *cptr, char *prefix, int pargc, char **pargv);
 
 
 cmdstruct serverbnccmds[] =
@@ -124,6 +125,7 @@ cmdstruct serverbnccmds[] =
 	{ "JOIN", srv_join, FLAGCONNECTED, FLAGNONE },
 	{ "KICK", srv_kick, FLAGCONNECTED, FLAGNONE },
 	{ "PART", srv_part, FLAGCONNECTED, FLAGNONE },
+	{ "QUIT", srv_quit, FLAGCONNECTED, FLAGNONE },
 	{ "376", srv_endmotd, FLAGCONNECTED, FLAGNONE },
 	{ "PRIVMSG", srv_privmsg, FLAGCONNECTED, FLAGNONE },
 	{NULL, NULL, 0,0}
@@ -212,6 +214,7 @@ int irc_strcasecmp(const char *s1, const char *s2)
 	}
 	return 1;
 }
+
 int wipechans(struct cliententry *cptr)
 {
 	struct chanentry *ochan;
@@ -461,7 +464,7 @@ nodock:
 	return w;
 }
 
-BUILTIN_COMMAND(srv_ping) 
+int srv_ping(struct cliententry *cptr, char *prefix, int pargc, char **pargv) 
 {
 //	int r;
 	if(pargc < 2)
@@ -473,7 +476,7 @@ BUILTIN_COMMAND(srv_ping)
 	
 }
 
-BUILTIN_COMMAND(srv_part)
+int srv_part(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int m;
 	if(pargc < 2)
@@ -489,7 +492,7 @@ BUILTIN_COMMAND(srv_part)
 	return FORWARDCMD;
 }
 
-BUILTIN_COMMAND(srv_kick)
+int srv_kick(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 3)
 	{
@@ -503,7 +506,7 @@ BUILTIN_COMMAND(srv_kick)
 	return FORWARDCMD;
 }
 
-BUILTIN_COMMAND(srv_endmotd)
+int srv_endmotd(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 //	int r;
 	struct chanentry *chanlist;
@@ -521,47 +524,87 @@ BUILTIN_COMMAND(srv_endmotd)
 	return FORWARDCMD;
 }
 
-BUILTIN_COMMAND(srv_join)
+char *nuh_pgetnick(char *userhost)
 {
-	int r,p,m;
-	struct chanentry *chan;
-	if(pargc < 2)
-	{
-		return FORWARDCMD;
-	}
-	m=ismenuh(prefix,cptr->nick);
-	if(!m)
-	{
-		return FORWARDCMD;
-	}
+	char *src;
+	char *nick;
 	
-	chan=findchan(cptr->headchan,pargv[1]);
-	if(chan != NULL)
-	{
-		return FORWARDCMD;
-	}
+	for(src = userhost; *src && !(*src == '!' || *src == ' '); ++src);
+	if(src <= userhost)
+		return NULL;
 	
-	p=strlen(pargv[1]);
-	chan=pmalloc(sizeof(struct chanentry)+p+1);
-	memset(chan->chan,0,p+1);
+	nick = pmalloc((src - userhost) + 1);
+	
+	memcpy(nick, userhost, src - userhost);
+	nick[src - userhost] = 0;
+	return nick;
+}
 
-	for(r=0;p>0;p--)
+void process_join(struct cliententry *cptr, char *userhost, char *channame)
+{
+	int len;
+	struct chanentry *channel;
+
+	channel = findchan(cptr->headchan, channame);
+	if( ismenuh(userhost, cptr->nick) == 0 )
 	{
-		chan->chan[r]=pargv[1][r];
-		r++;
+		char *nick;
+		/* user is not me */
+		nick = nuh_pgetnick(userhost);
+		if(nick == NULL)
+		{
+			/* failed to parse the name */
+			return;
+		}
+
+		printf("NICK %s\n", nick);		
+		free(nick);
+		return;
 	}
-	chan->prev=0;
-	chan->next=cptr->headchan;
+
+	/* user is me */
+
+	if(channel != NULL)
+	{
+		/* already known, nothing to do but ignore */
+		return;
+	}
+
+	len = strlen(channame);
+	channel = pmalloc(sizeof(struct chanentry) + len + 1);
+	memcpy(channel->chan, channame, len);
+	channel->chan[len] = 0;
+
+	channel->prev=0;
+	channel->next=cptr->headchan;
 	if(cptr->headchan)
-	{
-		cptr->headchan->prev=chan;
-	}
-	cptr->headchan=chan;	
-	
+		cptr->headchan->prev=channel;
+	cptr->headchan=channel;
+}
+
+void process_quit(struct cliententry *cptr, char *userhost)
+{
+	return;
+}
+
+int srv_quit(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
+{
+	if(prefix == NULL)
+		return FORWARDCMD;
+	process_quit(cptr, prefix);
 	return FORWARDCMD;
 }
 
-BUILTIN_COMMAND(srv_nick)
+int srv_join(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
+{
+	if(pargc < 2 || prefix == NULL)
+		return FORWARDCMD;
+
+	process_join(cptr, prefix, pargv[1]);
+	return FORWARDCMD;
+}
+
+int srv_nick(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int p,repc,c,f;
 	char repv[3];
@@ -606,7 +649,7 @@ BUILTIN_COMMAND(srv_nick)
 	
 }
 
-BUILTIN_COMMAND(srv_tellnick)
+int srv_tellnick(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 2)
 	{
@@ -624,7 +667,7 @@ BUILTIN_COMMAND(srv_tellnick)
 
 
 
-BUILTIN_COMMAND(srv_privmsg)
+int srv_privmsg(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	char *msg;
 #if 0
@@ -665,7 +708,7 @@ BUILTIN_COMMAND(srv_privmsg)
 	return ct_handle(cptr, prefix, pargv[1], msg, SERVER);
 }
 
-BUILTIN_COMMAND(cmd_privmsg)
+int cmd_privmsg(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	char *msg;
 	if(pargc < 3)
@@ -678,13 +721,13 @@ BUILTIN_COMMAND(cmd_privmsg)
 }
 
 
-BUILTIN_COMMAND(cmd_resumealive)
+int cmd_resumealive(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	cptr->flags &= ~FLAGDOCKED;
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_resume)
+int cmd_resume(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int sfd;
 	struct cliententry *client;
@@ -732,7 +775,7 @@ BUILTIN_COMMAND(cmd_resume)
 	return 0;	
 }
 
-BUILTIN_COMMAND(cmd_dock)
+int cmd_dock(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 2)
 	{
@@ -753,12 +796,12 @@ BUILTIN_COMMAND(cmd_dock)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_quit)
+int cmd_quit(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	return KILLCURRENTUSER;
 }
 
-BUILTIN_COMMAND(cmd_dumpll)
+int cmd_dumpll(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	struct cliententry *client_ptr;
 
@@ -773,7 +816,7 @@ BUILTIN_COMMAND(cmd_dumpll)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_rawecho)
+int cmd_rawecho(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 2)
 	{
@@ -783,7 +826,7 @@ BUILTIN_COMMAND(cmd_rawecho)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_prefixrawecho)
+int cmd_prefixrawecho(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 2)
 		return 0;
@@ -796,7 +839,7 @@ BUILTIN_COMMAND(cmd_prefixrawecho)
 
 
 
-BUILTIN_COMMAND(cmd_bypass)
+int cmd_bypass(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 2)
 	{
@@ -807,7 +850,7 @@ BUILTIN_COMMAND(cmd_bypass)
 }
 
 
-BUILTIN_COMMAND(cmd_nick)
+int cmd_nick(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if(pargc < 2)
 	{
@@ -822,7 +865,7 @@ BUILTIN_COMMAND(cmd_nick)
 	}
 	return 0;
 }
-BUILTIN_COMMAND(cmd_pass)
+int cmd_pass(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int p;
 	int iswhite;
@@ -911,7 +954,7 @@ BUILTIN_COMMAND(cmd_pass)
 	}
 	return 0;
 }
-BUILTIN_COMMAND(cmd_user)
+int cmd_user(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if (pargc < 5)
 	{
@@ -927,7 +970,7 @@ BUILTIN_COMMAND(cmd_user)
 	cptr->flags |= FLAGUSER;
 	return 0;
 }
-BUILTIN_COMMAND(cmd_help)
+int cmd_help(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int p;
 	for (p = 0; helplist[p] != NULL; p++)
@@ -946,7 +989,7 @@ BUILTIN_COMMAND(cmd_help)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_main)
+int cmd_main(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if (pargc < 2)
 	{
@@ -963,7 +1006,7 @@ BUILTIN_COMMAND(cmd_main)
 	tprintf(&cptr->loc, "NOTICE AUTH :Failed Main!!\n");
 	return 0;
 }
-BUILTIN_COMMAND(cmd_conn)
+int cmd_conn(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int cport;
 //	int res;
@@ -1005,7 +1048,7 @@ BUILTIN_COMMAND(cmd_conn)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_ident)
+int cmd_ident(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if (pargc < 2)
 	{
@@ -1017,14 +1060,14 @@ BUILTIN_COMMAND(cmd_ident)
 	cptr->uname[USERLEN]='\0';
 	return 0;
 }
-BUILTIN_COMMAND(cmd_vn)
+int cmd_vn(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	tprintf(&cptr->loc, "NOTICE AUTH :Nulling out Vhost to system internal default\n");
 	memset (cptr->vhost, '\0',HOSTLEN);
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_vdf)
+int cmd_vdf(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if (strlen (jack->vhostdefault) < 1)
 		tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default\n");
@@ -1034,15 +1077,18 @@ BUILTIN_COMMAND(cmd_vdf)
 	cptr->vhost[HOSTLEN]='\0';
 	return 0;
 }
-BUILTIN_COMMAND(cmd_vip)
+int cmd_vip(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int f;
 	int highvh;
-	int res;
 	struct vhostentry *vhost_ptr;
+	char *vhost;
+#if 0
+	int res;
 	struct hostent *he;
 	struct in_addr addr;
-	char *vhost;
+#endif
+
 	
 	f = 0;
 	if (pargc > 1)
@@ -1085,7 +1131,7 @@ BUILTIN_COMMAND(cmd_vip)
 			}
 vfast_fail:				
 		}
-
+#if 0
 		res = inet_aton(vhost, &addr);
 		if(res == 1)
 		{
@@ -1106,6 +1152,9 @@ vfast_fail:
 			else
 				tprintf(&cptr->loc, "NOTICE AUTH :Vhost %s invalid\n", vhost);
 		}
+#else
+		tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost to %s\n", cptr->vhost);
+#endif
 	}
 	else
 	{	
@@ -1128,7 +1177,7 @@ vfast_fail:
 	}
 	return 0;
 }
-BUILTIN_COMMAND(cmd_who)
+int cmd_who(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int nchans;
 	char chans[128+1];
@@ -1164,14 +1213,14 @@ BUILTIN_COMMAND(cmd_who)
 	tprintf(&cptr->loc, "NOTICE AUTH :End of user list.\n");
 	return 0;
 }
-BUILTIN_COMMAND(cmd_bdie)
+int cmd_bdie(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	tprintf(&cptr->loc, "NOTICE AUTH :Shutting it down....\n");
 	logprint(jack,"Shutdown called by %s@%s",cptr->nick,cptr->fromip);
 	bnckill(FATALITY);
 	return 0;
 }
-BUILTIN_COMMAND(cmd_die)
+int cmd_die(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	tprintf(&cptr->loc, "NOTICE AUTH :Shutting it down....\n");
 	logprint(jack,"Shutdown called by %s@%s",cptr->nick,cptr->fromip);
@@ -1179,7 +1228,7 @@ BUILTIN_COMMAND(cmd_die)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_bmsg)
+int cmd_bmsg(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int p;
 	struct cliententry *client_ptr;
@@ -1207,7 +1256,7 @@ BUILTIN_COMMAND(cmd_bmsg)
 	
 }
 
-BUILTIN_COMMAND(cmd_bkill)
+int cmd_bkill(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int p;
 	struct cliententry *client_ptr;
@@ -1248,7 +1297,7 @@ BUILTIN_COMMAND(cmd_bkill)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_addhost)
+int cmd_addhost(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	accesslist *na;
 	
@@ -1270,7 +1319,7 @@ BUILTIN_COMMAND(cmd_addhost)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_listhost)
+int cmd_listhost(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	accesslist *na;
 	int i;
@@ -1282,7 +1331,7 @@ BUILTIN_COMMAND(cmd_listhost)
 	return 0;
 }
 
-BUILTIN_COMMAND(cmd_keepalive)
+int cmd_keepalive(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	if( !(cptr->flags & FLAGKEEPALIVE ))
 	{
