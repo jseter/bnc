@@ -26,9 +26,9 @@ extern int h_errno;
 extern char logbuf[];
 extern int bnclog (confetti * jr, char *logbuff);
 extern void add_access (confetti *, accesslist *);
-extern int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **pargv, char *prefix);
+extern int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **pargv, char *prefix);
 extern void bnckill (int reason);
-extern int wipechans(struct cliententry *list_ptr);
+extern int wipechans(struct cliententry *cptr);
 extern int remnl (char *buf, int size);
 extern void *pmalloc(size_t size);
 extern char *helplist[];
@@ -152,7 +152,7 @@ int logprint(confetti *jr,const char *format,...)
 }
 
 
-int thestat(char *buf,int len, struct cliententry *list_ptr)
+int thestat(char *buf,int len, struct cliententry *cptr)
 {
 	int p,d;
 	char *st[2] = 
@@ -160,7 +160,7 @@ int thestat(char *buf,int len, struct cliententry *list_ptr)
 		"spunbackd",
 		"SPUNBACKD",
 	};
-	d=list_ptr->flags;
+	d=cptr->flags;
 	for(p=0;st[0][p];p++)
 	{
 		if(p+1 >= len)
@@ -182,20 +182,20 @@ int chanlist(char *buf,int len, struct cliententry *client)
 {
 	int p,c,f;
 	char *s;
-	struct chanentry *list_ptr;
+	struct chanentry *cptr;
 	p=0;
-	list_ptr=client->headchan;
+	cptr=client->headchan;
 	c=0;
 	memset(buf,0,len);
 	
-	while(list_ptr)
+	while(cptr)
 	{
 		c++;
 		if(p>0)
 		{
 			buf[p++]=' ';
 		}
-		for(s=list_ptr->chan;*s;s++)
+		for(s=cptr->chan;*s;s++)
 		{
 			buf[p++]=*s;
 			if(p>=len)
@@ -206,7 +206,7 @@ int chanlist(char *buf,int len, struct cliententry *client)
 		if(p<len)
 		{
 			buf[p]='\0';
-			list_ptr=list_ptr->next;
+			cptr=cptr->next;
 		}
 		else
 		{
@@ -217,7 +217,7 @@ int chanlist(char *buf,int len, struct cliententry *client)
 			{
 				buf[p]='.';
 			}
-			list_ptr=NULL;
+			cptr=NULL;
 		}
 	}
 	return c;
@@ -392,38 +392,38 @@ int send_queued(struct lsock *cptr)
 
 
 
-int wipeclient(struct cliententry *list_ptr)
+int wipeclient(struct cliententry *cptr)
 {
-	wipechans(list_ptr);
-	if(list_ptr->loc.fd > -1)
+	wipechans(cptr);
+	if(cptr->loc.fd > -1)
 	{
-		send_queued(&list_ptr->loc);
-		close(list_ptr->loc.fd);
-		list_ptr->loc.fd=-1;
+		send_queued(&cptr->loc);
+		close(cptr->loc.fd);
+		cptr->loc.fd=-1;
 	}
-	if(list_ptr->srv.fd > -1)
+	if(cptr->srv.fd > -1)
 	{
-		send_queued(&list_ptr->srv);
-		close(list_ptr->srv.fd);
-		list_ptr->srv.fd=-1;
+		send_queued(&cptr->srv);
+		close(cptr->srv.fd);
+		cptr->srv.fd=-1;
 	}
 
-	sbuf_clear(&list_ptr->loc.sendq);
-	sbuf_clear(&list_ptr->loc.recvq);
-	sbuf_clear(&list_ptr->srv.sendq);
-	sbuf_clear(&list_ptr->srv.recvq);
+	sbuf_clear(&cptr->loc.sendq);
+	sbuf_clear(&cptr->loc.recvq);
+	sbuf_clear(&cptr->srv.sendq);
+	sbuf_clear(&cptr->srv.recvq);
 	return 0;
 }
 
-int freeclientlist (struct cliententry *list_ptr)
+int freeclientlist (struct cliententry *cptr)
 {
-  struct cliententry *hold_ptr;
+  struct cliententry *hptr;
 
-  while (list_ptr != NULL)
+  while (cptr != NULL)
   {
-    hold_ptr = list_ptr->next;
-    wipeclient(list_ptr);
-    list_ptr = hold_ptr;
+    hptr = cptr->next;
+    wipeclient(cptr);
+    cptr = hptr;
   }
   return 1;
 }
@@ -436,31 +436,31 @@ int bewmstick (void)
   return 0;
 }
 
-struct cliententry *getclient (struct cliententry *list_ptr, int nfd)
+struct cliententry *getclient (struct cliententry *cptr, int nfd)
 {
-	while (list_ptr != NULL)
+	while (cptr != NULL)
 	{
-		if (list_ptr->loc.fd == nfd)
+		if (cptr->loc.fd == nfd)
 		{
-			return list_ptr;
+			return cptr;
 		}
-		if (list_ptr->srv.fd == nfd)
+		if (cptr->srv.fd == nfd)
 		{
-			return list_ptr;
+			return cptr;
 		}
-		list_ptr = list_ptr->next;
+		cptr = cptr->next;
 	}
 	return NULL;
 }
 
-int countfds (struct cliententry *list_ptr)
+int countfds (struct cliententry *cptr)
 {
 	int p;
 
 	p = 0;
-	for(p=0;list_ptr;list_ptr=list_ptr->next)
+	for(p=0;cptr;cptr=cptr->next)
 	{
-		if(list_ptr->loc.fd == -1)
+		if(cptr->loc.fd == -1)
 		{
 			continue;
 		}
@@ -632,7 +632,7 @@ int do_connect(char *vhostname, char *hostname, u_short port, char *uname, int *
  * also expects a \0 to be prepended.
  */ 
 
-int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *buf)
+int handleclient (struct cliententry *cptr, int fromwho, int buflen, char *buf)
 {
 	int p, f, r;
 	char *prefix;
@@ -690,8 +690,8 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 			}
 		}
 	}
- 	f=handlepclient(list_ptr, fromwho, pargc, pargv, prefix);
-	if((list_ptr->flags & FLAGCONNECTED) && (f == FORWARDCMD))
+ 	f=handlepclient(cptr, fromwho, pargc, pargv, prefix);
+	if((cptr->flags & FLAGCONNECTED) && (f == FORWARDCMD))
 	{
 		f=0;
 		for(p=0;p<buflen;p++)
@@ -707,15 +707,15 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 		}
 		if(fromwho == CLIENT)
 		{
-			tprintf(&list_ptr->srv, "%s\n", buf);
+			tprintf(&cptr->srv, "%s\n", buf);
 		}
 		else
 		{
 			/* don't forward anything if its docked */
 			r=1;
-			if( !(list_ptr->flags & FLAGDOCKED))
+			if( !(cptr->flags & FLAGDOCKED))
 			{
-				tprintf(&list_ptr->loc, "%s\n", buf);
+				tprintf(&cptr->loc, "%s\n", buf);
 			}
 		}
 		f=0;
@@ -726,75 +726,107 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 
 void initclient(fd_set *rfds, fd_set *wfds)
 {
-	struct cliententry *list_ptr;
-	
+	struct cliententry *cptr;
+	int length;
+		
 	highfd = s_sock;
 	FD_ZERO(rfds);
 	FD_ZERO(wfds);
 
 
-	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
+	for(cptr=headclient;cptr;cptr=cptr->next)
 	{
-		if(list_ptr->loc.fd > -1)
+		/* handle write set first */
+		if(cptr->loc.fd > -1)
 		{
-			FD_SET(list_ptr->loc.fd, rfds);
-			if (list_ptr->loc.fd > highfd)
+			if((length = sbuf_getlength(&cptr->loc.sendq)))
 			{
-				highfd = list_ptr->loc.fd;
-			}
-			if(sbuf_getlength(&list_ptr->loc.sendq))
-			{
-				FD_SET(list_ptr->loc.fd, wfds);
-				if(list_ptr->loc.fd > highfd)
-					highfd = list_ptr->loc.fd;
+				if(length > HIGHOVL)
+				{
+					if(cptr->srv.fd >= 0)
+						cptr->srv.flags |= FLAGDRAIN;
+				}
+				
+				if(length < LOWOVL)
+				{
+					if(cptr->srv.fd >= 0)
+						cptr->srv.flags &= ~FLAGDRAIN;
+				}
+			
+				FD_SET(cptr->loc.fd, wfds);
+				if(cptr->loc.fd > highfd)
+					highfd = cptr->loc.fd;
 			}
 		}
-		if(list_ptr->flags & FLAGCONNECTED)
+
+		if(cptr->flags & FLAGCONNECTED  && cptr->srv.fd > -1)
 		{
-			if( list_ptr->srv.fd > -1)
+			if((length = sbuf_getlength(&cptr->srv.sendq)))
 			{
-				FD_SET(list_ptr->srv.fd,rfds);
-				if (list_ptr->srv.fd > highfd)
+				if(length > HIGHOVL)
 				{
-					highfd = list_ptr->srv.fd;
+					if(cptr->loc.fd >= 0)
+						cptr->loc.flags |= FLAGDRAIN;
 				}
-				if(sbuf_getlength(&list_ptr->srv.sendq))
+				
+				if(length < LOWOVL)
 				{
-					FD_SET(list_ptr->srv.fd, wfds);
-					if(list_ptr->srv.fd > highfd)
-						highfd = list_ptr->srv.fd;
+					if(cptr->loc.fd >= 0)
+						cptr->loc.flags &= ~FLAGDRAIN;
 				}
-			}	
+				FD_SET(cptr->srv.fd, wfds);
+				if(cptr->srv.fd > highfd)
+					highfd = cptr->srv.fd;
+			}
+		}
+
+		/* now set read(s) if not draining */
+		if(cptr->loc.fd > -1 && !(cptr->loc.flags & FLAGDRAIN))
+		{
+			FD_SET(cptr->loc.fd, rfds);
+			if (cptr->loc.fd > highfd)
+			{
+				highfd = cptr->loc.fd;
+			}
+		}
+		
+		if(cptr->flags & FLAGCONNECTED && cptr->srv.fd > -1 && !(cptr->srv.flags & FLAGDRAIN) )
+		{
+			FD_SET(cptr->srv.fd,rfds);
+			if (cptr->srv.fd > highfd)
+			{
+				highfd = cptr->srv.fd;
+			}
 		}
 	}
 }
 
 char mline[512];
-int scanclient (struct cliententry *list_ptr, fd_set * rfds)
+int scanclient (struct cliententry *cptr, fd_set * rfds)
 {
 	int f,r,m;
 	int res;
 
 	m=0;
-	if(list_ptr->loc.fd >= 0)
+	if(cptr->loc.fd >= 0)
 	{
-		m=(FD_ISSET (list_ptr->loc.fd, rfds));
+		m=(FD_ISSET (cptr->loc.fd, rfds));
 	}
 	if(m)
 	{
-		r = recv (list_ptr->loc.fd, allbuf, PACKETBUFF, 0);
+		r = recv (cptr->loc.fd, allbuf, PACKETBUFF, 0);
 		if(r <= 0)
 		{
-			if(list_ptr->flags & FLAGDOCKED)
+			if(cptr->flags & FLAGDOCKED)
 			{
-				if(list_ptr->srv.fd == -1)
+				if(cptr->srv.fd == -1)
 				{
-					close(list_ptr->loc.fd);
-					list_ptr->loc.fd = -1;
+					close(cptr->loc.fd);
+					cptr->loc.fd = -1;
 					return KILLCURRENTUSER;
 				}
-				close(list_ptr->loc.fd); /* wipe that dude */
-				list_ptr->loc.fd=DOCKEDFD;
+				close(cptr->loc.fd); /* wipe that dude */
+				cptr->loc.fd=DOCKEDFD;
 				return 0;
 			}
 			else
@@ -802,50 +834,50 @@ int scanclient (struct cliententry *list_ptr, fd_set * rfds)
 				return KILLCURRENTUSER;
 			}
 		}
-		sbuf_put(&list_ptr->loc.recvq, allbuf, r);
+		sbuf_put(&cptr->loc.recvq, allbuf, r);
 	}
 
 	for(;;)
 	{
-		res = sbuf_getmsg(&list_ptr->loc.recvq, mline, 512);
+		res = sbuf_getmsg(&cptr->loc.recvq, mline, 512);
 		if(res <= 0)
 			break;
-		f = handleclient(list_ptr, CLIENT, res - 1, mline);
+		f = handleclient(cptr, CLIENT, res - 1, mline);
 		if(f > 1)
 			return f; 			
 	}
 
-	if(!(list_ptr->flags & FLAGCONNECTED))
+	if(!(cptr->flags & FLAGCONNECTED))
 	{
 		return 0;
 	}
 	
-	if(list_ptr->srv.fd == -1)
+	if(cptr->srv.fd == -1)
 	{
-		list_ptr->flags &= ~FLAGCONNECTED;
+		cptr->flags &= ~FLAGCONNECTED;
 		return 0;
 	}	
 	
 	
 	
-	if(FD_ISSET (list_ptr->srv.fd, rfds))
+	if(FD_ISSET (cptr->srv.fd, rfds))
 	{
-		r = recv (list_ptr->srv.fd, allbuf, PACKETBUFF, 0);
+		r = recv (cptr->srv.fd, allbuf, PACKETBUFF, 0);
 		if (r <= 0)
 		{
-			if(list_ptr->flags & FLAGKEEPALIVE)
+			if(cptr->flags & FLAGKEEPALIVE)
 				return SERVERDIED;
 			else
 				return KILLCURRENTUSER;
 		}
-		sbuf_put(&list_ptr->srv.recvq, allbuf, r);
+		sbuf_put(&cptr->srv.recvq, allbuf, r);
 
 		for(;;)
 		{
-			res = sbuf_getmsg(&list_ptr->srv.recvq, mline, 512);
+			res = sbuf_getmsg(&cptr->srv.recvq, mline, 512);
 			if(res <= 0)
 				break;
-			f = handleclient(list_ptr, SERVER, res - 1, mline);
+			f = handleclient(cptr, SERVER, res - 1, mline);
 			if(f > 1)
 				return f; 			
 		}
@@ -858,18 +890,18 @@ int scanclient (struct cliententry *list_ptr, fd_set * rfds)
 void chkclient(fd_set *rfds, fd_set *wfds)
 {
 	int p;
-	struct cliententry *list_ptr;
+	struct cliententry *cptr;
 
 
-	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
+	for(cptr=headclient;cptr;cptr=cptr->next)
 	{
-		p=scanclient(list_ptr,rfds);
+		p=scanclient(cptr,rfds);
 		if(p)
 			goto han_err;
 		
-		if(list_ptr->loc.fd >= 0 && FD_ISSET(list_ptr->loc.fd, wfds))
+		if(cptr->loc.fd >= 0 && FD_ISSET(cptr->loc.fd, wfds))
 		{
-			p = send_queued(&list_ptr->loc);
+			p = send_queued(&cptr->loc);
 			if(p == -1)
 			{
 				p = KILLCURRENTUSER;
@@ -878,19 +910,19 @@ void chkclient(fd_set *rfds, fd_set *wfds)
 
 		}
 
-		if(list_ptr->srv.fd >= 0 && FD_ISSET(list_ptr->srv.fd, wfds))
+		if(cptr->srv.fd >= 0 && FD_ISSET(cptr->srv.fd, wfds))
 		{
-			p = send_queued(&list_ptr->srv);
+			p = send_queued(&cptr->srv);
 			if(p == -1)
 			{
 				p = SERVERDIED;
 				goto han_err;
 			}
-			if(list_ptr->flags & FLAGCONNECTING)
+			if(cptr->flags & FLAGCONNECTING)
 			{
-				list_ptr->flags &= ~FLAGCONNECTING;
-				tprintf(&list_ptr->loc, "NOTICE AUTH :Suceeded connection\n");
-				logprint(jack, "(%i) %s!%s@%s connected to %s", list_ptr->loc.fd, list_ptr->nick, list_ptr->uname, list_ptr->fromip, list_ptr->onserver);
+				cptr->flags &= ~FLAGCONNECTING;
+				tprintf(&cptr->loc, "NOTICE AUTH :Suceeded connection\n");
+				logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, cptr->onserver);
 			}
 		}
 
@@ -898,24 +930,24 @@ han_err:
 		if(p == KILLCURRENTUSER) /* self death */
 		{
 		
-			wipeclient(list_ptr);			
+			wipeclient(cptr);			
 			return;
 		}
 		if(p == SERVERDIED) /* keep alive */
 		{
-//			page_free(&list_ptr->page_server);
-			sbuf_clear(&list_ptr->srv.sendq);
-			sbuf_clear(&list_ptr->srv.recvq);
-			tprintf(&list_ptr->loc, "NOTICE AUTH :IRC quit, KeepAlive here.\n", list_ptr->nick);
-			list_ptr->flags &= ~FLAGCONNECTING;
-			if(list_ptr->flags & FLAGCONNECTED)
+//			page_free(&cptr->page_server);
+			sbuf_clear(&cptr->srv.sendq);
+			sbuf_clear(&cptr->srv.recvq);
+			tprintf(&cptr->loc, "NOTICE AUTH :IRC quit, KeepAlive here.\n", cptr->nick);
+			cptr->flags &= ~FLAGCONNECTING;
+			if(cptr->flags & FLAGCONNECTED)
 			{
-				if( list_ptr->srv.fd != -1)
+				if( cptr->srv.fd != -1)
 				{
-					close(list_ptr->srv.fd);
-					list_ptr->srv.fd=-1;
+					close(cptr->srv.fd);
+					cptr->srv.fd=-1;
 				}
-				list_ptr->flags &= ~FLAGCONNECTED;
+				cptr->flags &= ~FLAGCONNECTED;
 			}
 		}
 	}
@@ -926,7 +958,7 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 {
 	int p,r;
 	struct in_addr faddr;
-	struct cliententry *list_ptr;
+	struct cliententry *cptr;
 
 	if (jack->maxusers)
 	{
@@ -947,53 +979,53 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 		return -1;
 	}
 
-	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
+	for(cptr=headclient;cptr;cptr=cptr->next)
 	{
-		if((list_ptr->loc.fd == -1) && (list_ptr->srv.fd == -1))
+		if((cptr->loc.fd == -1) && (cptr->srv.fd == -1))
 			break;
 	}
 
-	if(list_ptr == NULL)
+	if(cptr == NULL)
 	{
-		list_ptr = (struct cliententry *) pmalloc( sizeof( struct cliententry ));
-		if( list_ptr == NULL)
+		cptr = (struct cliententry *) pmalloc( sizeof( struct cliententry ));
+		if( cptr == NULL)
 		{
 			return -1;
 		}
 
-		memset(list_ptr, 0, sizeof(struct cliententry));
-		list_ptr->prev=NULL;
-		list_ptr->next=headclient;
+		memset(cptr, 0, sizeof(struct cliententry));
+		cptr->prev=NULL;
+		cptr->next=headclient;
 
 		if( headclient != NULL)
 		{
-			headclient->prev=list_ptr;
+			headclient->prev=cptr;
 		}
-		headclient=list_ptr;	
+		headclient=cptr;	
 	}
 			
-	list_ptr->loc.fd = citizen;
-	list_ptr->srv.fd = -1;
+	cptr->loc.fd = citizen;
+	cptr->srv.fd = -1;
 		
-	list_ptr->flags=0;
-	list_ptr->headchan=NULL;
+	cptr->flags=0;
+	cptr->headchan=NULL;
 		
-	strncpy(list_ptr->vhost, jack->vhostdefault, HOSTLEN);
-	list_ptr->vhost[HOSTLEN]='\0';
-	strcpy(list_ptr->nick,"UNKNOWN");
+	strncpy(cptr->vhost, jack->vhostdefault, HOSTLEN);
+	cptr->vhost[HOSTLEN]='\0';
+	strcpy(cptr->nick,"UNKNOWN");
 	faddr = nin->sin_addr;
-	strncpy (list_ptr->fromip, gethost (&faddr), HOSTLEN);
-	list_ptr->fromip[HOSTLEN]='\0';
+	strncpy (cptr->fromip, gethost (&faddr), HOSTLEN);
+	cptr->fromip[HOSTLEN]='\0';
 
 	if (jack->dpassf == 0)
 	{
-		list_ptr->flags |= FLAGPASS;
+		cptr->flags |= FLAGPASS;
 	}
-	sbuf_claim(&list_ptr->loc.recvq);
-	sbuf_claim(&list_ptr->loc.sendq);
-	sbuf_claim(&list_ptr->srv.recvq);
-	sbuf_claim(&list_ptr->srv.sendq);
-//	list_ptr->blen=0;
+	sbuf_claim(&cptr->loc.recvq);
+	sbuf_claim(&cptr->loc.sendq);
+	sbuf_claim(&cptr->srv.recvq);
+	sbuf_claim(&cptr->srv.sendq);
+//	cptr->blen=0;
 		
 	return 0;
 }

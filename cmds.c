@@ -19,12 +19,13 @@ extern void bnckill (int reason);
 extern int bewmstick (void);
 //RM extern int sockprint(int fd,const char *format,...);
 extern int logprint(confetti *jr,const char *format,...);
+extern int send_queued(struct lsock *cptr);
 extern int passwordokay (char *s, char *pass);
 extern int do_connect (char *vhostname, char *hostname, u_short port, char *uname, int *status);
-extern int thestat(char *buf,int len, struct cliententry *list_ptr);
-extern struct cliententry *getclient(struct cliententry *list_ptr, int nfd);
+extern int thestat(char *buf,int len, struct cliententry *cptr);
+extern struct cliententry *getclient(struct cliententry *cptr, int nfd);
 extern void add_access (confetti *, accesslist *);
-extern int wipeclient(struct cliententry *list_ptr);
+extern int wipeclient(struct cliententry *cptr);
 extern confetti *jack;
 extern int chanlist(char *buf,int len, struct cliententry *client);
 extern struct cliententry *headclient;
@@ -205,12 +206,12 @@ int irc_strcasecmp(const char *s1, const char *s2)
 	}
 	return 1;
 }
-int wipechans(struct cliententry *list_ptr)
+int wipechans(struct cliententry *cptr)
 {
 	struct chanentry *ochan;
 	struct chanentry *chanlist;
 	
-	chanlist=list_ptr->headchan;
+	chanlist=cptr->headchan;
 	while(chanlist)
 	{
 		ochan=chanlist;
@@ -218,7 +219,7 @@ int wipechans(struct cliententry *list_ptr)
 		
 		free(ochan);
 	}
-	list_ptr->headchan=NULL;
+	cptr->headchan=NULL;
 	return 0;
 }
 
@@ -235,16 +236,16 @@ struct chanentry *findchan(struct chanentry *chanlist, char *chan)
 	return NULL;
 }
 
-int wipechan(struct cliententry *list_ptr, char *chan)
+int wipechan(struct cliententry *cptr, char *chan)
 {
 	struct chanentry *chanlist;
 
-	if(list_ptr == NULL)
+	if(cptr == NULL)
 	{
 		return 1;
 	}
 	
-	chanlist=findchan(list_ptr->headchan,chan);
+	chanlist=findchan(cptr->headchan,chan);
 
 	if(chanlist == NULL)
 	{
@@ -257,7 +258,7 @@ int wipechan(struct cliententry *list_ptr, char *chan)
 	}
 	else
 	{
-		list_ptr->headchan=chanlist->next;
+		cptr->headchan=chanlist->next;
 	}
 			
 	if(chanlist->next)
@@ -330,66 +331,66 @@ int ismenuh(char *prefix, char *nick)
 	return m;
 }
 
-int irc_connect(struct cliententry *list_ptr, char *server, u_short port, char *pass)
+int irc_connect(struct cliententry *cptr, char *server, u_short port, char *pass)
 {
 	int cs;
 	int res;
 	
-	list_ptr->flags &= ~FLAGAUTOCONN;
-	list_ptr->susepass=0;
+	cptr->flags &= ~FLAGAUTOCONN;
+	cptr->susepass=0;
 	
-	if(list_ptr->flags & FLAGCONNECTED)
+	if(cptr->flags & FLAGCONNECTED)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Disconnecting old\n", server, port);		
-		if(list_ptr->srv.fd > -1)
+		tprintf(&cptr->loc, "NOTICE AUTH :Disconnecting old\n", server, port);		
+		if(cptr->srv.fd > -1)
 		{
-			close(list_ptr->srv.fd);
-			list_ptr->srv.fd=-1;
+			close(cptr->srv.fd);
+			cptr->srv.fd=-1;
 		}
-		sbuf_clear(&list_ptr->srv.sendq);
-		sbuf_clear(&list_ptr->srv.recvq);
-		list_ptr->flags &= ~FLAGCONNECTED;
+		sbuf_clear(&cptr->srv.sendq);
+		sbuf_clear(&cptr->srv.recvq);
+		cptr->flags &= ~FLAGCONNECTED;
 	}
 	
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Making reality through %s port %i\n", server, port);	
+	tprintf(&cptr->loc, "NOTICE AUTH :Making reality through %s port %i\n", server, port);	
 
-	cs = do_connect(list_ptr->vhost, server, port, list_ptr->uname, &res);
+	cs = do_connect(cptr->vhost, server, port, cptr->uname, &res);
 	if (cs < 0)
 	{
 		if(cs == -9)
-			tprintf(&list_ptr->loc, "NOTICE AUTH :Failed Connection (Supplied Vhost is not on this system)\n");
+			tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection (Supplied Vhost is not on this system)\n");
 		else
-			tprintf(&list_ptr->loc, "NOTICE AUTH :Failed Connection\n");
+			tprintf(&cptr->loc, "NOTICE AUTH :Failed Connection\n");
 		return -1;
 	}
 
 	if(res == 0)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Suceeded connection\n");
-		logprint(jack, "(%i) %s!%s@%s connected to %s", list_ptr->loc.fd, list_ptr->nick, list_ptr->uname, list_ptr->fromip, server);
+		tprintf(&cptr->loc, "NOTICE AUTH :Suceeded connection\n");
+		logprint(jack, "(%i) %s!%s@%s connected to %s", cptr->loc.fd, cptr->nick, cptr->uname, cptr->fromip, server);
 	}
 	else
-		list_ptr->flags |= FLAGCONNECTING;		
+		cptr->flags |= FLAGCONNECTING;		
 
-	strncpy (list_ptr->onserver, server, HOSTLEN);
-	list_ptr->onserver[HOSTLEN]='\0';
-	strncpy (list_ptr->sid, server, HOSTLEN);
-	list_ptr->sid[HOSTLEN]='\0';
+	strncpy (cptr->onserver, server, HOSTLEN);
+	cptr->onserver[HOSTLEN]='\0';
+	strncpy (cptr->sid, server, HOSTLEN);
+	cptr->sid[HOSTLEN]='\0';
 
-	list_ptr->srv.fd = cs;
-	list_ptr->flags |= FLAGCONNECTED;
+	cptr->srv.fd = cs;
+	cptr->flags |= FLAGCONNECTED;
 
 	if(pass)
-		tprintf(&list_ptr->srv, "PASS :%s\n", pass);
-	tprintf(&list_ptr->srv, "NICK %s\n", list_ptr->nick);	
-	tprintf(&list_ptr->srv, "USER %s \"%s\" \"%s\" :%s\n", list_ptr->uname, list_ptr->fromip, list_ptr->onserver, list_ptr->realname);
+		tprintf(&cptr->srv, "PASS :%s\n", pass);
+	tprintf(&cptr->srv, "NICK %s\n", cptr->nick);	
+	tprintf(&cptr->srv, "USER %s \"%s\" \"%s\" :%s\n", cptr->uname, cptr->fromip, cptr->onserver, cptr->realname);
 	return 0;
 
 }
 
 
 
-int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **pargv, char *prefix)
+int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **pargv, char *prefix)
 {
 	int p,f,r,w;
 	FILE *motdf;
@@ -412,12 +413,12 @@ int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **
 		if(!strcasecmp(pargv[0],bnccmds[p].name))
 		{
 			/* lets check flags */
-			if( (bnccmds[p].flags_on & list_ptr->flags) == bnccmds[p].flags_on)
+			if( (bnccmds[p].flags_on & cptr->flags) == bnccmds[p].flags_on)
 			{
-				if( (bnccmds[p].flags_off & ~list_ptr->flags) == bnccmds[p].flags_off)
+				if( (bnccmds[p].flags_off & ~cptr->flags) == bnccmds[p].flags_off)
 				{
 					w=0;
-					f=bnccmds[p].func(list_ptr, prefix, pargc, pargv);
+					f=bnccmds[p].func(cptr, prefix, pargc, pargv);
 					break;
 				}
 			}
@@ -429,24 +430,24 @@ int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **
 		return f;
 	}	
 
-	if( (list_ptr->flags & ( FLAGNICK | FLAGUSER | FLAGPASS)) != ( FLAGNICK | FLAGUSER | FLAGPASS) )
+	if( (cptr->flags & ( FLAGNICK | FLAGUSER | FLAGPASS)) != ( FLAGNICK | FLAGUSER | FLAGPASS) )
 	{
 		return w;
 	}
 
-	if( !( list_ptr->flags & FLAGBASED ))
+	if( !( cptr->flags & FLAGBASED ))
 	{
-		list_ptr->flags |= FLAGBASED;
-		if (list_ptr->flags & FLAGAUTOCONN)
+		cptr->flags |= FLAGBASED;
+		if (cptr->flags & FLAGAUTOCONN)
 		{
 			/* handle the autoconn stuff, disabled for now */
-			if (list_ptr->susepass)
+			if (cptr->susepass)
 			{
-				r=irc_connect(list_ptr, list_ptr->autoconn, list_ptr->sport, list_ptr->autopass);
+				r=irc_connect(cptr, cptr->autoconn, cptr->sport, cptr->autopass);
 			}
 			else
 			{
-				r=irc_connect(list_ptr, list_ptr->autoconn, list_ptr->sport, NULL);
+				r=irc_connect(cptr, cptr->autoconn, cptr->sport, NULL);
 			}
 			if(r > 1)
 			{
@@ -456,9 +457,9 @@ int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **
 			return w;
 
 		}
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Welcome to BNC " VERSION ", the irc proxy\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :Welcome to BNC " VERSION ", the irc proxy\n");
 
-		if( (list_ptr->flags & FLAGSUPER) == 0)
+		if( (cptr->flags & FLAGSUPER) == 0)
 		{      
 			motdf = fopen (jack->motdf, "r");
 			if(motdf != NULL)
@@ -473,39 +474,39 @@ int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **
 				
 					if(p > 0)
 					{
-						tprintf(&list_ptr->loc, "NOTICE AUTH :-*- %s\n", motdb);						
+						tprintf(&cptr->loc, "NOTICE AUTH :-*- %s\n", motdb);						
 					}
 				}
 				fclose (motdf);
 			}
 		}
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Level two, lets connect to something real now\n");
-		tprintf(&list_ptr->loc, "NOTICE AUTH :type /quote conn [server] <port> <pass> to connect\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :Level two, lets connect to something real now\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :type /quote conn [server] <port> <pass> to connect\n");
 
 		/* dock scan */
 		{
-			struct cliententry *cptr;
-			for(cptr = headclient; cptr; cptr=cptr->next)
+			struct cliententry *dptr;
+			for(dptr = headclient; dptr; dptr=dptr->next)
 			{
-				if(cptr->flags & FLAGDOCKED)
+				if(dptr->flags & FLAGDOCKED)
 				{
-					tprintf(&list_ptr->loc, "NOTICE AUTH :You have docked sessions to resume type /quote resume <dockfd> <password>\n");					
+					tprintf(&cptr->loc, "NOTICE AUTH :You have docked sessions to resume type /quote resume <dockfd> <password>\n");					
 					goto dock;
 				}
 			}
 			goto nodock;
-			for(; cptr; cptr=cptr->next)
+			for(; dptr; dptr=dptr->next)
 			{
-				if(cptr->flags & FLAGDOCKED)
+				if(dptr->flags & FLAGDOCKED)
 				{
 dock:
-					tprintf(&list_ptr->loc, "NOTICE AUTH :Docked session %i\n", cptr->srv.fd);
+					tprintf(&cptr->loc, "NOTICE AUTH :Docked session %i\n", dptr->srv.fd);
 				}
 			}
-			tprintf(&list_ptr->loc, "NOTICE AUTH :End of dock list\n");
+			tprintf(&cptr->loc, "NOTICE AUTH :End of dock list\n");
 nodock:
 		}
-		tprintf(&list_ptr->loc, "NOTICE AUTH :type /quote help for basic list of commands and usage\n");			        
+		tprintf(&cptr->loc, "NOTICE AUTH :type /quote help for basic list of commands and usage\n");			        
 	}
 	return w;
 }
@@ -517,7 +518,7 @@ BUILTIN_COMMAND(srv_ping)
 	{
 		return 0;
 	}
-	tprintf(&list_ptr->srv, "PONG :%s\n", pargv[1] );
+	tprintf(&cptr->srv, "PONG :%s\n", pargv[1] );
 	return 0; /* we don't wanna forward anything when docked */
 	
 }
@@ -529,12 +530,12 @@ BUILTIN_COMMAND(srv_part)
 	{
 		return FORWARDCMD;
 	}
-	m=ismenuh(prefix,list_ptr->nick);
+	m=ismenuh(prefix,cptr->nick);
 	if(!m) /* its not me, so forget it */
 	{
 		return FORWARDCMD;
 	}
-	wipechan(list_ptr,pargv[1]);
+	wipechan(cptr,pargv[1]);
 	return FORWARDCMD;
 }
 
@@ -544,9 +545,9 @@ BUILTIN_COMMAND(srv_kick)
 	{
 		return FORWARDCMD;
 	}
-	if(!strncasecmp(list_ptr->nick, pargv[2] ,NICKLEN))
+	if(!strncasecmp(cptr->nick, pargv[2] ,NICKLEN))
 	{
-		wipechan(list_ptr, pargv[1]);
+		wipechan(cptr, pargv[1]);
 	}
 
 	return FORWARDCMD;
@@ -556,14 +557,14 @@ BUILTIN_COMMAND(srv_endmotd)
 {
 //	int r;
 	struct chanentry *chanlist;
-	if(list_ptr->docked == 1) /* ok resuming is almost done */
+	if(cptr->docked == 1) /* ok resuming is almost done */
 	{
-		list_ptr->docked = 0;
-		chanlist=list_ptr->headchan;
+		cptr->docked = 0;
+		chanlist=cptr->headchan;
 		while(chanlist)
 		{
-			tprintf(&list_ptr->loc, ":%s!%s@%s JOIN %s\n",list_ptr->nick, list_ptr->uname, list_ptr->fromip, chanlist->chan );
-			tprintf(&list_ptr->srv, "NAMES %s\n",chanlist->chan );
+			tprintf(&cptr->loc, ":%s!%s@%s JOIN %s\n",cptr->nick, cptr->uname, cptr->fromip, chanlist->chan );
+			tprintf(&cptr->srv, "NAMES %s\n",chanlist->chan );
 			chanlist=chanlist->next;
 		}
 	}
@@ -578,13 +579,13 @@ BUILTIN_COMMAND(srv_join)
 	{
 		return FORWARDCMD;
 	}
-	m=ismenuh(prefix,list_ptr->nick);
+	m=ismenuh(prefix,cptr->nick);
 	if(!m)
 	{
 		return FORWARDCMD;
 	}
 	
-	chan=findchan(list_ptr->headchan,pargv[1]);
+	chan=findchan(cptr->headchan,pargv[1]);
 	if(chan != NULL)
 	{
 		return FORWARDCMD;
@@ -600,12 +601,12 @@ BUILTIN_COMMAND(srv_join)
 		r++;
 	}
 	chan->prev=0;
-	chan->next=list_ptr->headchan;
-	if(list_ptr->headchan)
+	chan->next=cptr->headchan;
+	if(cptr->headchan)
 	{
-		list_ptr->headchan->prev=chan;
+		cptr->headchan->prev=chan;
 	}
-	list_ptr->headchan=chan;	
+	cptr->headchan=chan;	
 	
 	return FORWARDCMD;
 }
@@ -633,10 +634,10 @@ BUILTIN_COMMAND(srv_nick)
 	repc = getnickuserhost(nuh, prefix, repv);
 	
 	
-	if(!strncasecmp(list_ptr->nick, nuh[0],NICKLEN))
+	if(!strncasecmp(cptr->nick, nuh[0],NICKLEN))
 	{
-		strncpy( list_ptr->nick, pargv[1], NICKLEN);
-		list_ptr->nick[NICKLEN]='\0';
+		strncpy( cptr->nick, pargv[1], NICKLEN);
+		cptr->nick[NICKLEN]='\0';
 	}
 	f=0;
 	for(p=0;p<c;p++)
@@ -661,19 +662,19 @@ BUILTIN_COMMAND(srv_tellnick)
 	{
 		return 0;
 	}
-	strncpy(list_ptr->nick,pargv[1],NICKLEN);
-	list_ptr->nick[NICKLEN]='\0';
+	strncpy(cptr->nick,pargv[1],NICKLEN);
+	cptr->nick[NICKLEN]='\0';
 	if(prefix != NULL)
 	{
-		strncpy(list_ptr->sid,prefix,HOSTLEN);
-		list_ptr->sid[HOSTLEN]='\0';
+		strncpy(cptr->sid,prefix,HOSTLEN);
+		cptr->sid[HOSTLEN]='\0';
 	}
 	return FORWARDCMD;
 }
 
 BUILTIN_COMMAND(cmd_resumealive)
 {
-	list_ptr->flags &= ~FLAGDOCKED;
+	cptr->flags &= ~FLAGDOCKED;
 	return 0;
 }
 
@@ -684,7 +685,7 @@ BUILTIN_COMMAND(cmd_resume)
 
 	if(pargc < 3)
 	{
-		tprintf(&list_ptr->loc, "NOTICE %s :Syntax, /quote resume dock_fd pass\n",list_ptr->nick);
+		tprintf(&cptr->loc, "NOTICE %s :Syntax, /quote resume dock_fd pass\n",cptr->nick);
 		return 0;
 	}
 
@@ -693,35 +694,35 @@ BUILTIN_COMMAND(cmd_resume)
 
 	if(client == NULL || !(client->flags & FLAGDOCKED))
 	{
-		tprintf(&list_ptr->loc, "NOTICE %s :Docked fd not found\n",list_ptr->nick);
+		tprintf(&cptr->loc, "NOTICE %s :Docked fd not found\n",cptr->nick);
 		return 0;	
 	}
 	
 	if(!strncasecmp(client->autopass,pargv[2],PASSLEN))
 	{
-		tprintf(&list_ptr->loc, "NOTICE %s :-*- Resuming session\n",list_ptr->nick);
+		tprintf(&client->loc, "NOTICE %s :-*- Resuming session\n",cptr->nick);
 
-		if( strncasecmp(client->nick, list_ptr->nick, NICKLEN) )
+		if( strncasecmp(client->nick, cptr->nick, NICKLEN) )
 		{
-			tprintf(&list_ptr->loc, ":%s@%s!%s NICK :%s\n",list_ptr->nick,list_ptr->uname,list_ptr->fromip, client->nick);
+			tprintf(&client->loc, ":%s@%s!%s NICK :%s\n",cptr->nick,cptr->uname,cptr->fromip, client->nick);
 		}
 	
-		tprintf(&list_ptr->loc, ":%s 001 %s :Welcome to a resumed bnc session\n", client->sid, client->nick);
-		tprintf(&list_ptr->loc, ":%s 002 %s :your host is %s, running an irc server\n", client->sid, client->nick, client->sid);
-		tprintf(&list_ptr->loc, ":%s 003 %s :%s runs docked bnc\n", client->sid, client->nick, client->sid);
-		tprintf(&list_ptr->loc, ":%s 004 %s %s 234123 _____ ______\n", client->sid, client->nick, client->sid);
-		tprintf(&list_ptr->srv, "LUSERS\nMOTD\n");
+		tprintf(&client->loc, ":%s 001 %s :Welcome to a resumed bnc session\n", client->sid, client->nick);
+		tprintf(&client->loc, ":%s 002 %s :your host is %s, running an irc server\n", client->sid, client->nick, client->sid);
+		tprintf(&client->loc, ":%s 003 %s :%s runs docked bnc\n", client->sid, client->nick, client->sid);
+		tprintf(&client->loc, ":%s 004 %s %s 234123 _____ ______\n", client->sid, client->nick, client->sid);
+		tprintf(&client->srv, "LUSERS\nMOTD\n");
 
 		client->docked=1;
-		client->loc.fd=list_ptr->loc.fd;
+		client->loc.fd=cptr->loc.fd;
 		client->flags &= ~FLAGDOCKED;
-		list_ptr->loc.fd=-1;
-		list_ptr->srv.fd=-1;
+		cptr->loc.fd=-1;
+		cptr->srv.fd=-1;
 		return KILLCURRENTUSER;
 	
 	}
 	else
-		tprintf(&list_ptr->loc, "NOTICE %s :incorrect resume pass\n",list_ptr->nick);
+		tprintf(&cptr->loc, "NOTICE %s :incorrect resume pass\n",cptr->nick);
 	return 0;	
 }
 
@@ -729,18 +730,19 @@ BUILTIN_COMMAND(cmd_dock)
 {
 	if(pargc < 2)
 	{
-		tprintf(&list_ptr->loc, "NOTICE %s :/quote DOCK pass\n",list_ptr->nick);
+		tprintf(&cptr->loc, "NOTICE %s :/quote DOCK pass\n",cptr->nick);
 		return 0;
 	}
 
-	tprintf(&list_ptr->loc, "NOTICE %s :To resume, /quote resume %i %s\n",list_ptr->nick,list_ptr->srv.fd,pargv[1]);
-	strncpy(list_ptr->autopass, pargv[1], PASSLEN);
-	list_ptr->autopass[PASSLEN]='\0';
-	list_ptr->flags |= FLAGDOCKED;
-	if(!(list_ptr->flags & FLAGKEEPALIVE))
+	tprintf(&cptr->loc, "NOTICE %s :To resume, /quote resume %i %s\n",cptr->nick,cptr->srv.fd,pargv[1]);
+	strncpy(cptr->autopass, pargv[1], PASSLEN);
+	cptr->autopass[PASSLEN]='\0';
+	cptr->flags |= FLAGDOCKED;
+	if(!(cptr->flags & FLAGKEEPALIVE))
 	{
-		close(list_ptr->loc.fd);
-		list_ptr->loc.fd=DOCKEDFD;
+		send_queued(&cptr->loc);
+		close(cptr->loc.fd);
+		cptr->loc.fd=DOCKEDFD;
 	}
 	return 0;
 }
@@ -755,13 +757,13 @@ BUILTIN_COMMAND(cmd_dumpll)
 	struct cliententry *client_ptr;
 
 	client_ptr = headclient;
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Dumping Links.\n");
+	tprintf(&cptr->loc, "NOTICE AUTH :Dumping Links.\n");
 	while (client_ptr != NULL)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :%p<= %p => %p :(%i,%i)\n", client_ptr->prev, client_ptr, client_ptr->next, client_ptr->loc.fd, client_ptr->srv.fd);
+		tprintf(&cptr->loc, "NOTICE AUTH :%p<= %p => %p :(%i,%i)\n", client_ptr->prev, client_ptr, client_ptr->next, client_ptr->loc.fd, client_ptr->srv.fd);
 		client_ptr = client_ptr->next;
 	}
-	tprintf(&list_ptr->loc, "NOTICE AUTH :End of Linked list.\n");
+	tprintf(&cptr->loc, "NOTICE AUTH :End of Linked list.\n");
 	return 0;
 }
 
@@ -771,7 +773,7 @@ BUILTIN_COMMAND(cmd_rawecho)
 	{
 		return 0;
 	}
-	tprintf(&list_ptr->loc, "%s\n",pargv[1]);
+	tprintf(&cptr->loc, "%s\n",pargv[1]);
 	return 0;
 }
 
@@ -780,9 +782,9 @@ BUILTIN_COMMAND(cmd_prefixrawecho)
 	if(pargc < 2)
 		return 0;
 	if(prefix == NULL)
-		tprintf(&list_ptr->loc, ":%s!%s@%s %s\n", list_ptr->nick, list_ptr->uname, list_ptr->fromip, pargv[1]);
+		tprintf(&cptr->loc, ":%s!%s@%s %s\n", cptr->nick, cptr->uname, cptr->fromip, pargv[1]);
 	else
-		tprintf(&list_ptr->loc, ":%s %s\n", prefix, pargv[1]);
+		tprintf(&cptr->loc, ":%s %s\n", prefix, pargv[1]);
 	return 0;
 }
 
@@ -794,7 +796,7 @@ BUILTIN_COMMAND(cmd_bypass)
 	{
 		return 0;
 	}
-	tprintf(&list_ptr->srv, "%s\n",pargv[1]);
+	tprintf(&cptr->srv, "%s\n",pargv[1]);
 	return 0;
 }
 
@@ -805,12 +807,12 @@ BUILTIN_COMMAND(cmd_nick)
 	{
 		return 0;
 	}
-	strncpy (list_ptr->nick, pargv[1], NICKLEN);
-	list_ptr->nick[NICKLEN]=0;
-	list_ptr->flags |= FLAGNICK;
-	if( (list_ptr->flags & FLAGPASS) == 0)
+	strncpy (cptr->nick, pargv[1], NICKLEN);
+	cptr->nick[NICKLEN]=0;
+	cptr->flags |= FLAGNICK;
+	if( (cptr->flags & FLAGPASS) == 0)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :You need to say /quote PASS <password>\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :You need to say /quote PASS <password>\n");
 	}
 	return 0;
 }
@@ -869,37 +871,37 @@ BUILTIN_COMMAND(cmd_pass)
 	/* go back to the old way for now */
 	if(passwordokay (sargv[0], jack->dpass))
 	{
-		list_ptr->flags |= FLAGPASS;
+		cptr->flags |= FLAGPASS;
 		if(sargc > 1)
 		{
-			list_ptr->flags |= FLAGAUTOCONN;
-			strncpy (list_ptr->autoconn, sargv[1], HOSTLEN);
-			list_ptr->autoconn[HOSTLEN]='\0';
-			list_ptr->sport=jack->cport;
+			cptr->flags |= FLAGAUTOCONN;
+			strncpy (cptr->autoconn, sargv[1], HOSTLEN);
+			cptr->autoconn[HOSTLEN]='\0';
+			cptr->sport=jack->cport;
 			if(sargc > 2) /* contains port */
 			{
-				list_ptr->sport=mytoi(sargv[2]);
+				cptr->sport=mytoi(sargv[2]);
 			}
 			if(sargc > 3) /* contains server pass */
 			{
-				strncpy (list_ptr->autopass, sargv[3], PASSLEN);
-				list_ptr->autopass[PASSLEN]='\0';
-				list_ptr->susepass=1;
+				strncpy (cptr->autopass, sargv[3], PASSLEN);
+				cptr->autopass[PASSLEN]='\0';
+				cptr->susepass=1;
 			}
 		}
 	
 		
 		return 0;
 	}
-	list_ptr->pfails++;
-	if (list_ptr->pfails > 2)
+	cptr->pfails++;
+	if (cptr->pfails > 2)
 	{
 		return KILLCURRENTUSER;
 	}
-	logprint(jack, "Failed pass from %s password %s", list_ptr->fromip, sargv[0]);
-	if( list_ptr->flags & FLAGNICK )
+	logprint(jack, "Failed pass from %s password %s", cptr->fromip, sargv[0]);
+	if( cptr->flags & FLAGNICK )
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Failed Pass!!\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :Failed Pass!!\n");
 	}
 	return 0;
 }
@@ -910,13 +912,13 @@ BUILTIN_COMMAND(cmd_user)
 		return 0;
 	}
 
-	strncpy (list_ptr->realname, pargv[4], REALLEN);
-	list_ptr->realname[REALLEN]='\0';	
+	strncpy (cptr->realname, pargv[4], REALLEN);
+	cptr->realname[REALLEN]='\0';	
 
-	strncpy (list_ptr->uname, pargv[1], USERLEN);
-	list_ptr->uname[USERLEN]='\0';
+	strncpy (cptr->uname, pargv[1], USERLEN);
+	cptr->uname[USERLEN]='\0';
 	  
-	list_ptr->flags |= FLAGUSER;
+	cptr->flags |= FLAGUSER;
 	return 0;
 }
 BUILTIN_COMMAND(cmd_help)
@@ -924,17 +926,17 @@ BUILTIN_COMMAND(cmd_help)
 	int p;
 	for (p = 0; helplist[p] != NULL; p++)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :*** %s\n", helplist[p]);
+		tprintf(&cptr->loc, "NOTICE AUTH :*** %s\n", helplist[p]);
 	}
-	if(list_ptr->flags & FLAGSUPER)
+	if(cptr->flags & FLAGSUPER)
 	{
 		for (p = 0; helplista[p] != NULL; p++)
 		{
-			tprintf(&list_ptr->loc, "NOTICE AUTH :*** %s\n", helplista[p]);
+			tprintf(&cptr->loc, "NOTICE AUTH :*** %s\n", helplista[p]);
 		}
 	}
 
-	tprintf(&list_ptr->loc, "NOTICE AUTH :*** For a detailed explanation of commands, consult the file README,\n");
+	tprintf(&cptr->loc, "NOTICE AUTH :*** For a detailed explanation of commands, consult the file README,\n");
 	return 0;
 }
 
@@ -946,13 +948,13 @@ BUILTIN_COMMAND(cmd_main)
 	}
 	if (passwordokay (pargv[1], jack->spass))
 	{
-		list_ptr->flags |= FLAGSUPER;
-		list_ptr->flags |= FLAGPASS;
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Welcome Supervisor!!\n");
+		cptr->flags |= FLAGSUPER;
+		cptr->flags |= FLAGPASS;
+		tprintf(&cptr->loc, "NOTICE AUTH :Welcome Supervisor!!\n");
 	    return 0;
 	}
-	logprint(jack, "Failed MAIN from %s", list_ptr->fromip);
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Failed Main!!\n");
+	logprint(jack, "Failed MAIN from %s", cptr->fromip);
+	tprintf(&cptr->loc, "NOTICE AUTH :Failed Main!!\n");
 	return 0;
 }
 BUILTIN_COMMAND(cmd_conn)
@@ -974,11 +976,11 @@ BUILTIN_COMMAND(cmd_conn)
 	}
 	if (pargc > 3)
 	{
-		r=irc_connect(list_ptr, pargv[1], cport, pargv[3]);
+		r=irc_connect(cptr, pargv[1], cport, pargv[3]);
 	}
 	else
 	{
-		r=irc_connect(list_ptr, pargv[1], cport, NULL);
+		r=irc_connect(cptr, pargv[1], cport, NULL);
 	}
 	if(r > 1)
 	{
@@ -991,82 +993,122 @@ BUILTIN_COMMAND(cmd_ident)
 {
 	if (pargc < 2)
 	{
-		tprintf(&list_ptr->loc,  "NOTICE AUTH :current ident is %s\n", list_ptr->uname);
+		tprintf(&cptr->loc,  "NOTICE AUTH :current ident is %s\n", cptr->uname);
 		return 0;
 	}
-	tprintf(&list_ptr->loc, "NOTICE AUTH :changing ident from %s to %s\n", list_ptr->uname, pargv[1]);
-	strncpy (list_ptr->uname, pargv[1], USERLEN);
-	list_ptr->uname[USERLEN]='\0';
+	tprintf(&cptr->loc, "NOTICE AUTH :changing ident from %s to %s\n", cptr->uname, pargv[1]);
+	strncpy (cptr->uname, pargv[1], USERLEN);
+	cptr->uname[USERLEN]='\0';
 	return 0;
 }
 BUILTIN_COMMAND(cmd_vn)
 {
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Nulling out Vhost to system internal default\n");
-	memset (list_ptr->vhost, '\0',HOSTLEN);
+	tprintf(&cptr->loc, "NOTICE AUTH :Nulling out Vhost to system internal default\n");
+	memset (cptr->vhost, '\0',HOSTLEN);
 	return 0;
 }
 
 BUILTIN_COMMAND(cmd_vdf)
 {
 	if (strlen (jack->vhostdefault) < 1)
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Switching Vhost back to default\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default\n");
 	else
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Switching Vhost back to default (%s)\n", jack->vhostdefault);
-	strncpy (list_ptr->vhost, jack->vhostdefault, HOSTLEN);
-	list_ptr->vhost[HOSTLEN]='\0';
+		tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default (%s)\n", jack->vhostdefault);
+	strncpy (cptr->vhost, jack->vhostdefault, HOSTLEN);
+	cptr->vhost[HOSTLEN]='\0';
 	return 0;
 }
 BUILTIN_COMMAND(cmd_vip)
 {
 	int f;
+	int highvh;
 	int res;
 	struct vhostentry *vhost_ptr;
 	struct hostent *he;
 	struct in_addr addr;
+	char *vhost;
 	
 	f = 0;
 	if (pargc > 1)
 	{
-		res = inet_aton(pargv[1], &addr);
+		vhost = pargv[1];
+		
+		/* check for a fast entry */
+		{
+			char *s;
+			char ch;
+			for(f=0,s = pargv[1]; *s; s++)
+			{
+				ch = *s;
+				if(ch < '0' && ch > '9')
+					goto vfast_fail;
+				f *= 10;
+				f += ch - '0';
+			}
+			if((s - pargv[1]) == 0)
+				goto vfast_fail;
+
+			if(f == 0)
+			{
+				if (strlen (jack->vhostdefault) < 1)
+					tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default\n");
+				else
+					tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default (%s)\n", jack->vhostdefault);
+				strncpy (cptr->vhost, jack->vhostdefault, HOSTLEN);
+				cptr->vhost[HOSTLEN]='\0';
+				return 0;
+			}
+				
+			for(highvh = 1, vhost_ptr=jack->vhostlist; vhost_ptr; vhost_ptr = vhost_ptr->next, highvh++)
+			{
+				if(highvh == f)
+				{
+					vhost = vhost_ptr->vhost;
+					break;
+				}
+			}
+vfast_fail:				
+		}
+
+		res = inet_aton(vhost, &addr);
 		if(res == 1)
 		{
-			strncpy(list_ptr->vhost, inet_ntoa(addr), HOSTLEN);
-			list_ptr->vhost[HOSTLEN] = '\0';
-			tprintf(&list_ptr->loc, "NOTICE AUTH :Switching Vhost to %s\n", inet_ntoa (addr));
+			strncpy(cptr->vhost, inet_ntoa(addr), HOSTLEN);
+			cptr->vhost[HOSTLEN] = '\0';
+			tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost to %s\n", inet_ntoa (addr));
 		}
 		else
 		{
-			he = gethostbyname (pargv[1]);
+			he = gethostbyname (vhost);
 			if (he)
 			{
 				memcpy (&addr.s_addr, he->h_addr, sizeof (addr.s_addr));
-				strncpy (list_ptr->vhost, pargv[1], HOSTLEN);
-				list_ptr->vhost[HOSTLEN]='\0';
-				tprintf(&list_ptr->loc, "NOTICE AUTH :Switching Vhost to %s [%s]\n", list_ptr->vhost, inet_ntoa (addr));
+				strncpy (cptr->vhost, vhost, HOSTLEN);
+				cptr->vhost[HOSTLEN]='\0';
+				tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost to %s [%s]\n", cptr->vhost, inet_ntoa (addr));
 			}
 			else
-				tprintf(&list_ptr->loc, "NOTICE AUTH :Vhost %s invalid\n", pargv[1]);
+				tprintf(&cptr->loc, "NOTICE AUTH :Vhost %s invalid\n", vhost);
 		}
 	}
 	else
 	{	
 
-		if (strlen (list_ptr->vhost) != 0)
-			tprintf(&list_ptr->loc, "NOTICE AUTH :Default Vhost: %s\n", list_ptr->vhost);
+		if (strlen (cptr->vhost) != 0)
+			tprintf(&cptr->loc, "NOTICE AUTH :Current Vhost: %s\n", cptr->vhost);
 		else
-			tprintf(&list_ptr->loc, "NOTICE AUTH :Default Vhost: -SYSTEM DEFAULT-\n");
+			tprintf(&cptr->loc, "NOTICE AUTH :Current Vhost: -SYSTEM DEFAULT-\n");
 
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Listing Vhosts\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :Listing Vhosts\n");
 
-		vhost_ptr=jack->vhostlist;
-	      
-		while (vhost_ptr != NULL)
-		{
-			tprintf(&list_ptr->loc, "NOTICE AUTH : (%i) %s\n", f, vhost_ptr->vhost);	
-			f++;
-			vhost_ptr = vhost_ptr->next;
-		}
-		tprintf(&list_ptr->loc, "NOTICE AUTH :End of Vhost list\n");
+		if (strlen (jack->vhostdefault) < 1)		
+			tprintf(&cptr->loc, "NOTICE AUTH : (0) system default\n");	
+		else
+			tprintf(&cptr->loc, "NOTICE AUTH : (0) default (%s)\n", jack->vhostdefault);
+
+		for(f = 1, vhost_ptr=jack->vhostlist; vhost_ptr; vhost_ptr = vhost_ptr->next, f++)
+			tprintf(&cptr->loc, "NOTICE AUTH : (%i) %s\n", f, vhost_ptr->vhost);
+		tprintf(&cptr->loc, "NOTICE AUTH :End of Vhost list\n");
 	}
 	return 0;
 }
@@ -1080,7 +1122,7 @@ BUILTIN_COMMAND(cmd_who)
 	char st[11];
 
 	client_ptr = headclient;
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Listing users.\n");
+	tprintf(&cptr->loc, "NOTICE AUTH :Listing users.\n");
 	while (client_ptr != NULL)
 	{
 		thestat(st,11, client_ptr);
@@ -1088,30 +1130,35 @@ BUILTIN_COMMAND(cmd_who)
 		{
 			nchans=chanlist(chans,128,client_ptr);
 			if( client_ptr->flags & FLAGDOCKED )
-				tprintf(&list_ptr->loc, "NOTICE AUTH :(DOCKED FD %i Status: %s)[%s@%s] on server (%s) %s\n", client_ptr->srv.fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);
+				tprintf(&cptr->loc, "NOTICE AUTH :(DOCKED FD %i Status: %s)[%s@%s] on server (%s) %s\n", client_ptr->srv.fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);
 			else
-				tprintf(&list_ptr->loc, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] on server (%s) %s\n", client_ptr->loc.fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);			
+			{
+				if( client_ptr->flags & FLAGCONNECTING)
+					tprintf(&cptr->loc, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] connecting to server (%s) %s\n", client_ptr->loc.fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);
+				else
+					tprintf(&cptr->loc, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] on server (%s) %s\n", client_ptr->loc.fd, st, client_ptr->nick, client_ptr->fromip, client_ptr->sid, client_ptr->onserver);
+			}
 			if(nchans)
-				tprintf(&list_ptr->loc, "NOTICE AUTH :CHANLIST: %s\n", chans );
+				tprintf(&cptr->loc, "NOTICE AUTH :CHANLIST: %s\n", chans );
 		}
 		else
-			tprintf(&list_ptr->loc, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] \n", client_ptr->loc.fd, st, client_ptr->nick, client_ptr->fromip);			
+			tprintf(&cptr->loc, "NOTICE AUTH :(FD %i Status: %s)[%s@%s] \n", client_ptr->loc.fd, st, client_ptr->nick, client_ptr->fromip);			
 		client_ptr = client_ptr->next;
 	}
-	tprintf(&list_ptr->loc, "NOTICE AUTH :End of user list.\n");
+	tprintf(&cptr->loc, "NOTICE AUTH :End of user list.\n");
 	return 0;
 }
 BUILTIN_COMMAND(cmd_bdie)
 {
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Shutting it down....\n");
-	logprint(jack,"Shutdown called by %s@%s",list_ptr->nick,list_ptr->fromip);
+	tprintf(&cptr->loc, "NOTICE AUTH :Shutting it down....\n");
+	logprint(jack,"Shutdown called by %s@%s",cptr->nick,cptr->fromip);
 	bnckill(FATALITY);
 	return 0;
 }
 BUILTIN_COMMAND(cmd_die)
 {
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Shutting it down....\n");
-	logprint(jack,"Shutdown called by %s@%s",list_ptr->nick,list_ptr->fromip);
+	tprintf(&cptr->loc, "NOTICE AUTH :Shutting it down....\n");
+	logprint(jack,"Shutdown called by %s@%s",cptr->nick,cptr->fromip);
 	bewmstick ();
 	return 0;
 }
@@ -1128,18 +1175,18 @@ BUILTIN_COMMAND(cmd_bmsg)
 	p = mytoi (pargv[1]);
 	if(p < 1)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :invalid bmsg arguments\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :invalid bmsg arguments\n");
 		return 0;
 	}
 	
 	client_ptr = getclient(headclient,p);
 	if( client_ptr == NULL)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :No such FD %i\n", p);		          
+		tprintf(&cptr->loc, "NOTICE AUTH :No such FD %i\n", p);		          
 		return 0;
 	}
 
-	tprintf(&client_ptr->loc, "NOTICE AUTH :%i BMSG %s\n",list_ptr->loc.fd,pargv[2]);
+	tprintf(&client_ptr->loc, "NOTICE AUTH :%i BMSG %s\n",cptr->loc.fd,pargv[2]);
 	return 0;
 	
 }
@@ -1156,23 +1203,23 @@ BUILTIN_COMMAND(cmd_bkill)
 	p = mytoi (pargv[1]);
 	if(p < 1)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :invalid bkill argument\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :invalid bkill argument\n");
 		return 0;
 	}
 	client_ptr = getclient(headclient,p);
 	if( client_ptr == NULL)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :No such FD %i\n", p);		          
+		tprintf(&cptr->loc, "NOTICE AUTH :No such FD %i\n", p);		          
 		return 0;
 	}
 
-	if(p == list_ptr->loc.fd)
+	if(p == cptr->loc.fd)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Suicide is painful\n");
+		tprintf(&cptr->loc, "NOTICE AUTH :Suicide is painful\n");
 		return KILLCURRENTUSER;
 	}
 
-	tprintf(&list_ptr->loc, "NOTICE AUTH :Killed %i\n", p);
+	tprintf(&cptr->loc, "NOTICE AUTH :Killed %i\n", p);
 	logprint(jack, "BKILL to %s@%s", client_ptr->nick, client_ptr->fromip);
 
 	if(client_ptr->prev == NULL)
@@ -1214,22 +1261,22 @@ BUILTIN_COMMAND(cmd_listhost)
 	
 	for (na = jack->alist, i = 1; na; na = na->next, i++)
 	{
-		tprintf(&list_ptr->loc, "NOTICE AUTH :#%i: (t:%i) %s\r\n", i, (int) na->type, na->addr);
+		tprintf(&cptr->loc, "NOTICE AUTH :#%i: (t:%i) %s\r\n", i, (int) na->type, na->addr);
 	}
 	return 0;
 }
 
 BUILTIN_COMMAND(cmd_keepalive)
 {
-	if( !(list_ptr->flags & FLAGKEEPALIVE ))
+	if( !(cptr->flags & FLAGKEEPALIVE ))
 	{
-		list_ptr->flags |= FLAGKEEPALIVE;
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Enabling KeepAlive\n");
+		cptr->flags |= FLAGKEEPALIVE;
+		tprintf(&cptr->loc, "NOTICE AUTH :Enabling KeepAlive\n");
 	}
 	else
 	{
-		list_ptr->flags &= ~FLAGKEEPALIVE;
-		tprintf(&list_ptr->loc, "NOTICE AUTH :Disabling KeepAlive\n");
+		cptr->flags &= ~FLAGKEEPALIVE;
+		tprintf(&cptr->loc, "NOTICE AUTH :Disabling KeepAlive\n");
 	}
 	return 0;
 }

@@ -1,6 +1,9 @@
 #define VERSION "v2.8.6"
 #define PACKETBUFF 1024
 
+#define HIGHOVL 16384
+#define LOWOVL 4096
+
 #define KILLCURRENTUSER 100
 #define SERVERDIED 300
 #define FORWARDCMD 1
@@ -28,6 +31,9 @@
 #define FLAGDOCKED 256
 #define FLAGCONNECTING 512
 
+
+
+
 #define CLIENT 0
 #define SERVER 1
 
@@ -37,6 +43,8 @@ struct chanentry
 	struct chanentry *prev;
 	char chan[1]; 
 };
+
+#define FLAGDRAIN 1
 
 struct lsock
 {
@@ -82,7 +90,7 @@ struct cliententry
 
 
 
-#define BUILTIN_COMMAND(x) int x(struct cliententry *list_ptr, char *prefix, int pargc, char **pargv)
+#define BUILTIN_COMMAND(x) int x(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 
 typedef struct
 {

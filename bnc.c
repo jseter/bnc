@@ -146,8 +146,8 @@ int main (int argc, char **argv)
 		strncat (conffile, ".conf", PACKETBUFF);
 		conffile[PACKETBUFF]='\0';
 	}
-	printf ("Irc Proxy " VERSION " GNU project (C) 1998-99\n");
-	printf ("Coded by James Seter :bugs-> (Pharos@refract.com) or IRC pharos on efnet\n");
+	printf ("Irc Proxy " VERSION " Copyright 1998-2002\n");
+	printf ("Coded by James Seter (pharos@gotbnc.com)\n");
 	printf ("--Using conf file %s\n", conffile);
 
 	memset (&bncconf, 0, sizeof (bncconf));
@@ -179,16 +179,16 @@ int main (int argc, char **argv)
 	}
 
 	printf ("--Configuration:\n");
-	printf ("    Daemon port......:%u\n    Maxusers.........:%u\n    Default conn port:%u\n    Pid File.........:%s\n",
+	printf ("    Daemon port......: %u\n    Maxusers.........: %u\n    Default conn port: %u\n    Pid File.........: %s\n",
 		bncconf.dport, bncconf.maxusers, bncconf.cport, bncconf.pidfile);
 	
 	if (bncconf.vhostdefault[0] == '\0')
 	{
-		printf ("    Vhost Default....:-SYSTEM DEFAULT-\n");
+		printf ("    Vhost Default....: -SYSTEM DEFAULT-\n");
 	}
 	else
 	{
-		printf ("    Vhost Default....:%s\n", bncconf.vhostdefault);
+		printf ("    Vhost Default....: %s\n", bncconf.vhostdefault);
 	}
 	
 	if (bncconf.vhostlist != NULL)
@@ -196,7 +196,7 @@ int main (int argc, char **argv)
 		hockum = bncconf.vhostlist;
 		while (hockum != NULL)
 		{
-			printf ("    Vhost entry......:%s\n", hockum->vhost);
+			printf ("    Vhost entry......: %s\n", hockum->vhost);
 			hockum = hockum->next;
 		}
 	}
@@ -222,7 +222,7 @@ int main (int argc, char **argv)
 		}
 		default:
 		{
-			printf ("    Process Id.......:%i\n", tmps);
+			printf ("    Process Id.......: %i\n", tmps);
 			bnckill (BACKGROUND);
 		}
 	}
