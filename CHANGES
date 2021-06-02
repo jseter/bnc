@@ -1,4 +1,6 @@
-
+2.8.4
+(1) a quick change added to conf.c by moomoomoo to fix a major bug and tide
+	us over until the 3.0.0 version is ready for public release.
 2.8.2
 (1) Coded in channel watching code for docking.
 (2) Coded a new line parsing system

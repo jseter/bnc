@@ -170,7 +170,9 @@ CONFCMD(gen_d)
 	jr->maxusers = mytoi (pargv[2]);
 	if (pargc > 3)
 	{
-		
+		strncpy (jr->dpass, pargv[3], PASSLEN);
+        	jr->dpass[PASSLEN]='\0';
+        	jr->dpassf = 1;	
 	}
 		return 0;
 }

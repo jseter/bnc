@@ -6,12 +6,9 @@
    \  \_______/  \  \__\\  \ __\  \  \_______\
     \/_______/    \/__/   \/__/    \/_______/   IRC PROXY
    
-BNC 2.8.2 (c) 1998-99 by James Seter AKA Pharos on efnet
+BNC 2.8.4 (c) 1998-99 by James Seter AKA Pharos on efnet
 Site:
-  http://bnc.dragondata.com
-Nag:
-  Please donate, please donate, please donate
-  information about donation at bottom.
+  http://gotbnc.com
 
 Table of Contents
 
@@ -319,7 +316,7 @@ BNC                             IRC Proxy Daemon              April 1998
 
 5.  CREDITS
 
-	James Seter (Pharos) ....................: Pharos@DAL.net
+	James Seter (Pharos) ....................: Pharos@gotbnc.com
           Author of the program.
         Brian Mitchell (Halflife) ...............: ??
           One helluva good coder, coded the original base that was used
@@ -352,60 +349,4 @@ BNC                             IRC Proxy Daemon              April 1998
 
 
 James Seter                                                     [PAGE 6]
-
-BNC                             IRC Proxy Daemon              April 1998
-
-
-   If you get use out of BNC please help the GNU process by donating
-   money to me.  Small contributions such as $5 go a long way and I
-   appreciate anybody who contribuits. BNC is free, and its use thereof,
-   modifications can be made and released as long as the whole source is
-   included with credits made to the appropriate parties.  
-
-   Donations to:
-   BNC
-   P.O. Box 657
-   Doniphan Mo, 63935
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-James Seter                                                     [PAGE 7]
 
