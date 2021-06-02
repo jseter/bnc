@@ -1,3 +1,8 @@
+3.0.0
+(1) Implemented non-blocking DNS.
+(2) Fixed bugs caused by the implementation of the new conf format.
+(3) Added CTCP handling
+
 
 2.8.2
 (1) Coded in channel watching code for docking.

@@ -118,7 +118,7 @@ CONFCMD(conf_listen)
 	
 	return 0;
 }
-
+/* Man, it is 3am and all this code looks so illogic. */
 CONFCMD(conf_allow)
 {
 	accesslist *na;
@@ -170,7 +170,9 @@ CONFCMD(gen_d)
 	jr->maxusers = mytoi (pargv[2]);
 	if (pargc > 3)
 	{
-		
+		strncpy (jr->dpass, pargv[3], PASSLEN);
+		jr->dpass[PASSLEN]='\0';
+		jr->dpassf = 1;	
 	}
 		return 0;
 }
@@ -180,8 +182,12 @@ CONFCMD(gen_p)
 	{
 		return 0;
 	}
-	strncpy (jr->pidfile, pargv[1], FILELEN);
-	jr->pidfile[FILELEN]='\0';
+	
+//	strncpy (jr->pidfile, pargv[1], FILELEN);
+//	jr->pidfile[FILELEN]='\0';
+	if(jr->pidfile)
+		free(jr->pidfile);
+	jr->pidfile=strdup(pargv[1]); /* out of memory will be handled later */
 	return 0;
 }
 
@@ -249,9 +255,13 @@ CONFCMD(gen_m)
 	{
 		return 0;
 	}
-	strncpy (jr->motdf, pargv[1], 256);
-	jr->motdf[256]='\0';
-	jr->usemotd = 1;
+//	strncpy (jr->motdf, pargv[1], 256);
+//	jr->motdf[256]='\0';
+//	jr->usemotd = 1;
+	if(jr->motdfile)
+		free(jr->motdfile);
+	jr->motdfile=strdup(pargv[1]); /* fix this later as well */
+
 	return 0;
 }
 

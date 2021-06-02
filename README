@@ -6,12 +6,9 @@
    \  \_______/  \  \__\\  \ __\  \  \_______\
     \/_______/    \/__/   \/__/    \/_______/   IRC PROXY
    
-BNC 2.8.2 (c) 1998-99 by James Seter AKA Pharos on efnet
+BNC 3.0.0 (c) 1998-2002 by James Seter AKA Pharos on efnet
 Site:
-  http://bnc.dragondata.com
-Nag:
-  Please donate, please donate, please donate
-  information about donation at bottom.
+  http://gotbnc.com
 
 Table of Contents
 
@@ -118,7 +115,6 @@ BNC                             IRC Proxy Daemon              April 1998
 
    Things I hope to accomplish in later versions:
 
-   Ban lists. (skip that, allow lists work just fine)
    Non-Blocking sockets.
    More Admin commands.
    DCC automatic redirection through Proxy.

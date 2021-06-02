@@ -15,6 +15,7 @@
 #include <netdb.h>
 #include <pwd.h>
 
+#include "res.h"
 #include "common.h"
 #define ENDLESSLOOP for(;;)
 
@@ -32,6 +33,7 @@ extern char *helplist[];
 extern char *helplista[]; 
 
 extern unsigned char motdb[];
+extern int pres_activequeries;
 
 int highfd;
 int a_sock = 0;
@@ -39,7 +41,7 @@ int s_sock = 0;
 struct sockaddr_in muhsin;
 struct sockaddr wipi;
 int sinlen;
-
+int dnsfd;
 unsigned char allbuf[PACKETBUFF+1];
 unsigned char buffer[PACKETBUFF+1];
 
@@ -317,7 +319,7 @@ int
 
 
 
-
+#if 0
 int passwordokay (char *s, char *pass)
 {
 	char *encr;
@@ -339,7 +341,73 @@ int passwordokay (char *s, char *pass)
 		encr = s;
 	}
 
-	if (!strncmp (encr, pass, 10))
+	if (!strncmp (encr, pass, PASSLEN+1))
+	{
+		return 1;
+	}
+	return 0;
+}
+#endif
+
+int getsalt(char *dest, int len, char *buf)
+{
+	char *eob;
+	char *bpos;
+
+	eob=dest+len;
+	bpos=buf;
+
+	if(*bpos == '$')
+	{
+		int cnt;
+		len=0;
+		for(cnt=0;(dest < eob) && *bpos;)
+		{
+			*dest = *bpos;
+			if(*bpos == '$')
+				cnt++;
+
+			bpos++;
+			dest++;
+			len++;
+			if(cnt > 2)
+				break;
+		} 
+		*dest='\0';
+		return len;	
+		
+	}
+	else
+	{
+		if(len <= 0)
+			return -1;
+		if(len > 2)
+			len=2;
+		memcpy(dest, buf, len);	
+		return len;
+	}
+}
+
+int passwordokay (char *s, char *pass)
+{
+	char *encr;
+	char salt[32];
+	char *crypt ();
+
+	if (pass[0] == '+')
+	{
+		pass++;
+		getsalt(salt, 31, pass);
+//		printf("salt: %s\n", salt);
+		encr = crypt (s, salt);
+	}
+	else
+	{
+		encr = s;
+	}
+
+//	printf("compare %s %s\n", encr, pass);
+	if (!strncmp (encr, pass, PASSLEN+1))
 	{
 		return 1;
 	}
@@ -354,6 +422,7 @@ int connokay (struct sockaddr_in *sa, confetti * jr)
 
 	hp = gethostbyaddr ((char *) &sa->sin_addr, sizeof (struct in_addr), AF_INET);
 	logprint(jack, "Connection from %s", inet_ntoa (sa->sin_addr));
+
 
 	if (!jr->has_alist)
 	{
@@ -707,19 +776,21 @@ int handleclient (struct cliententry *list_ptr, int fromwho, int buflen, char *b
 }
 
 
-void initclient(fd_set * nation)
+void initclient(fd_set * rfds)
 {
 	struct cliententry *list_ptr;
 	
 	highfd = s_sock;
-	FD_ZERO (nation);
-	FD_SET (s_sock, nation);
+	FD_ZERO (rfds);
+	FD_SET (s_sock, rfds);
 
 	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
 	{
+		if(!(list_ptr->flags & FLAGREVERSE)) /* do no allow data until they reversed */
+			continue;
 		if(list_ptr->fd > -1)
 		{
-			FD_SET(list_ptr->fd, nation);
+			FD_SET(list_ptr->fd, rfds);
 			if (list_ptr->fd > highfd)
 			{
 				highfd = list_ptr->fd;
@@ -729,7 +800,7 @@ void initclient(fd_set * nation)
 		{
 			if( list_ptr->sfd > -1)
 			{
-				FD_SET(list_ptr->sfd,nation);
+				FD_SET(list_ptr->sfd,rfds);
 				if (list_ptr->sfd > highfd)
 				{
 					highfd = list_ptr->sfd;
@@ -740,7 +811,7 @@ void initclient(fd_set * nation)
 }
 
 
-int scanclient (struct cliententry *list_ptr, fd_set * nation)
+int scanclient (struct cliententry *list_ptr, fd_set * rfds)
 {
 	int p,c,f,r,m;
 	LINE *line_ptr;
@@ -748,7 +819,7 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 	m=0;
 	if(list_ptr->fd >= 0)
 	{
-		m=(FD_ISSET (list_ptr->fd, nation));
+		m=(FD_ISSET (list_ptr->fd, rfds));
 	}
 	if(m)
 	{
@@ -845,7 +916,7 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 	
 	
 	
-	if(FD_ISSET (list_ptr->sfd, nation))
+	if(FD_ISSET (list_ptr->sfd, rfds))
 	{
 		r = recv (list_ptr->sfd, allbuf, PACKETBUFF, 0);
 		if (r <= 0)
@@ -933,7 +1004,7 @@ int scanclient (struct cliententry *list_ptr, fd_set * nation)
 	return 0;
 }
 
-void chkclient(fd_set * nation)
+void chkclient(fd_set * rfds)
 {
 	int p,r;
 	struct cliententry *list_ptr;
@@ -941,7 +1012,7 @@ void chkclient(fd_set * nation)
 
 	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
 	{
-		p=scanclient(list_ptr,nation);
+		p=scanclient(list_ptr,rfds);
 
 		if(p == KILLCURRENTUSER) /* self death */
 		{
@@ -975,7 +1046,6 @@ void chkclient(fd_set * nation)
 
 int addon_client(int citizen, struct sockaddr_in *nin)
 {
-	int p,r;
 	struct in_addr faddr;
 	struct cliententry *list_ptr;
 
@@ -987,17 +1057,6 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 		}
 	}
 
-	p = sizeof(struct sockaddr_in);
-	r=getpeername (citizen, (struct sockaddr *)nin, &p);
-	if(r)
-	{
-		return -1;
-	}
-	if (!connokay (nin, jack))
-	{
-		return -1;
-	}
-
 	for(list_ptr=headclient;list_ptr;list_ptr=list_ptr->next)
 	{
 		if((list_ptr->fd == -1) && (list_ptr->sfd == -1))
@@ -1006,30 +1065,25 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 		}
 	}
 
+	list_ptr = (struct cliententry *) pmalloc( sizeof( struct cliententry ));
 	if(list_ptr == NULL)
 	{
-		list_ptr = (struct cliententry *) pmalloc( sizeof( struct cliententry ));
-		if( list_ptr == NULL)
-		{
-			return -1;
-		}
-
-		memset(list_ptr, 0, sizeof(struct cliententry));
-		list_ptr->prev=NULL;
-		list_ptr->next=headclient;
-
-		if( headclient != NULL)
-		{
-			headclient->prev=list_ptr;
-		}
-		headclient=list_ptr;	
+		return -1;
 	}
-			
+	memset(list_ptr, 0, sizeof(struct cliententry));
+
+	list_ptr->dnsid = pres_revquery(dnsfd, (char *) &nin->sin_addr.s_addr);
+	if(list_ptr->dnsid == -1)
+	{
+		return -1;
+	}		
+	list_ptr->pfails=0;		
 	list_ptr->fd = citizen;
 	list_ptr->sfd = -1;
 		
 	list_ptr->flags=0;
 	list_ptr->headchan=NULL;
+	
 		
 	strncpy(list_ptr->vhost, jack->vhostdefault, HOSTLEN);
 	list_ptr->vhost[HOSTLEN]='\0';
@@ -1043,7 +1097,57 @@ int addon_client(int citizen, struct sockaddr_in *nin)
 		list_ptr->flags |= FLAGPASS;
 	}
 	list_ptr->blen=0;
+	list_ptr->prev=NULL;
+	list_ptr->next=headclient;
+	if(headclient != NULL)
+		headclient->prev=list_ptr;
+	headclient=list_ptr;
 		
+	return 0;
+}
+
+int handle_pres(void)
+{
+	struct pres_answer *listrev;
+	struct cliententry *list_ptr;
+	int r;
+	for(list_ptr=headclient; list_ptr != NULL; list_ptr=list_ptr->next)
+	{
+		if(!(list_ptr->flags & FLAGREVERSE))
+		{
+//ph			printf("checking on %i id %i\n", list_ptr->fd, list_ptr->dnsid);
+			listrev = pres_getanswerid(list_ptr->dnsid);
+			if(listrev != NULL)
+			{
+				if(!(listrev->flags & FLAGPRESBAD))
+				{
+					memcpy(list_ptr->fromip, listrev->hostname, HOSTLEN);
+					list_ptr->fromip[HOSTLEN]='\0';
+					r=sockprint(list_ptr->fd, "NOTICE AUTH :Hostname reversed to %s.\n", list_ptr->fromip);
+					if(r < 0)
+					{
+						wipeclient(list_ptr);
+						return -1;
+					}
+					list_ptr->dnsid = 0;
+					list_ptr->flags |= FLAGREVERSE;
+				}
+				else
+				{
+					r=sockprint(list_ptr->fd, "NOTICE AUTH :Hostname failed lookup.\n");
+					if(r < 0)
+					{
+						wipeclient(list_ptr);
+						return -1;
+					}
+					list_ptr->dnsid = 0;
+					list_ptr->flags |= FLAGREVERSE;
+				}
+				pres_releaseanswerid(listrev);
+			}
+			
+		}
+	}
 	return 0;
 }
 
@@ -1052,11 +1156,14 @@ int initproxy (confetti * jr)
 {
 	int f;
 
+	dnsfd = pres_init();
+	if(dnsfd == -1)
+		return FATALITY;
+			
 	s_sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (s_sock < 0)
-	{
 		return SOCKERR;
-	}
+
 	memset (&muhsin, 0, sizeof (struct sockaddr_in));
 
 	muhsin.sin_family = AF_INET;
@@ -1083,30 +1190,71 @@ int ircproxy (confetti * jr)
 	int p,r,nfd;
 	struct sockaddr_in nin;
 	int ninlen;
-	fd_set nation;
+	fd_set rfds;
+	fd_set wfds;
+	struct timeval *delay;
+	struct timeval thetime;
+	struct timeval ndelay;
 
 	jack = jr;
 	ENDLESSLOOP
 	{
-		initclient(&nation);
-		if ((p = select (highfd + 1, &nation, (fd_set *) 0, (fd_set *) 0, NULL)) < 0)
+		FD_ZERO(&wfds);
+		initclient(&rfds);
+		FD_SET(dnsfd, &rfds);
+		p = gettimeofday(&thetime, NULL);
+//ph		if(p == -1)
+//ph			printf("clock may be unstable\n");
+
+		delay = pres_getnextevent(&thetime);
+
+		if(pres_activequeries == 1)
 		{
-			if(errno == ENOMEM)
-			{
-				bnckill (SELECTERR);
-			}
-			bnckill(FATALITY);
+			FD_SET(dnsfd, &wfds);
+			if(dnsfd > highfd)
+				highfd=dnsfd;
+//ph			printf("setting dns fd\n");
 		}
-		if (FD_ISSET (s_sock, &nation))
+//ph		if(delay != NULL)
+//ph			printf("next timeout in %i secs and %i usecs\n", delay->tv_sec, delay->tv_usec);
+//ph		sleep(1);
+		p = select (highfd + 1, &rfds, &wfds, (fd_set *) 0, delay);
+		if (p == -1)
 		{
-			nfd = accept (s_sock, (struct sockaddr *) &nin, &ninlen);
-			r=addon_client(nfd,&nin);
-			if(r == -1)
+			switch(errno)
 			{
-				close(nfd);
+				case EINTR:
+					break;
+				case ENOMEM:
+				default:
+					perror("select");
+					bnckill(SELECTERR);
+					return -1;
 			}
 		}
-		chkclient(&nation);
+		if(p > 0)
+		{
+			if (FD_ISSET (s_sock, &rfds))
+			{
+				nfd = accept (s_sock, (struct sockaddr *) &nin, &ninlen);
+				r=addon_client(nfd,&nin);
+				if(r == -1)
+				{
+					close(nfd);
+				}
+			}
+			if(FD_ISSET(dnsfd, &rfds))
+			{
+				pres_recv(dnsfd);
+				
+			}
+			if(FD_ISSET(dnsfd, &wfds))
+			{
+				pres_dumpbuf(dnsfd);
+			}
+			chkclient(&rfds);
+		}
+		handle_pres();
 	}
 	return 0;
 }

@@ -115,6 +115,22 @@ void *pmalloc(size_t size)
 	return s;
 }
 
+char *psdup(char *str)
+{
+	char *newstr;
+	char *s;
+	for(newstr=str; *newstr; newstr++);
+	newstr = pmalloc(newstr-str+1);
+
+	for(s=newstr; *str; s++, str++)
+	{
+		*s=*str;
+	}
+	*s='\0';
+	
+	return newstr;
+}
+
 int main (int argc, char **argv)
 {
 	int tmps;
@@ -155,9 +171,13 @@ int main (int argc, char **argv)
 	else if (strlen (pars) > 1)
 		pars++;
 
-	strcpy (bncconf.pidfile, "./pid.");
-	strncat (bncconf.pidfile, pars, 256);
 
+	bncconf.pidfile = pmalloc(4+strlen(pars)+1);
+	if(bncconf.pidfile)
+	{
+		strcpy (bncconf.pidfile, "pid.");
+		strcat (bncconf.pidfile, pars);
+	}
 	strcpy (bncconf.dpass, "-NONE-");
 	bncconf.dpassf = 0;
 	bncconf.identwd = 0;
@@ -221,11 +241,13 @@ int main (int argc, char **argv)
 			bnckill (BACKGROUND);
 		}
 	}
-	
-	if ((mylife = fopen (bncconf.pidfile, "wb")) != NULL)
+	if(bncconf.pidfile)
 	{
-		fprintf (mylife, "%i\n", getpid ());
-		fclose (mylife);
+		if ((mylife = fopen (bncconf.pidfile, "wb")) != NULL)
+		{
+			fprintf (mylife, "%i\n", getpid ());
+			fclose (mylife);
+		}
 	}
 	logprint(&bncconf, "BNC started. pid %i", getpid ());
 	tmps = ircproxy (&bncconf);

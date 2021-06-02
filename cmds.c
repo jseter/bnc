@@ -22,14 +22,16 @@ extern int thestat(char *buf,int len, struct cliententry *list_ptr);
 extern struct cliententry *getclient(struct cliententry *list_ptr, int nfd);
 extern void add_access (confetti *, accesslist *);
 extern int wipeclient(struct cliententry *list_ptr);
+extern int handlectcp(struct cliententry *list_ptr, unsigned char *fromwho, unsigned char *prefix, int pargc, unsigned char **pargv);
 extern confetti *jack;
 extern int chanlist(char *buf,int len, struct cliententry *client);
 extern struct cliententry *headclient;
 extern void *pmalloc(size_t size);
-extern int mytoi(char *buf);
+extern char *psdup(char *str);
 extern unsigned char touppertab[];
 extern unsigned char tolowertab[];
 
+char *arfunk="UNKNOWN";
 unsigned char motdb[MAXMOTDLINE];
 
 char *helplist[] =
@@ -107,6 +109,7 @@ BUILTIN_COMMAND(srv_kick);
 BUILTIN_COMMAND(srv_part);
 BUILTIN_COMMAND(srv_ping);
 BUILTIN_COMMAND(srv_endmotd);
+BUILTIN_COMMAND(srv_privmsg);
 
 cmdstruct serverbnccmds[] =
 {
@@ -117,6 +120,7 @@ cmdstruct serverbnccmds[] =
 	{ "KICK", srv_kick, FLAGCONNECTED, FLAGNONE },
 	{ "PART", srv_part, FLAGCONNECTED, FLAGNONE },
 	{ "376", srv_endmotd, FLAGCONNECTED, FLAGNONE },
+	{ "PRIVMSG", srv_privmsg, FLAGCONNECTED, FLAGNONE },
 	{NULL, NULL, 0,0}
 };
 
@@ -285,6 +289,29 @@ int getnickuserhost(char **argv,char *buf,char *fix)
 		{
 			buf[p]='\0';
 			fix[c++]='@';
+			argv[2]=&buf[p+1];
+		}
+	}
+	return c;
+}
+
+
+int splitnickuserhost(char **argv,char *buf)
+{
+	int p,c;
+	c=0;
+	argv[0]=buf;
+
+	for(p=0;buf[p];p++)
+	{
+		if(buf[p] == '!')
+		{
+			buf[p]='\0';
+			argv[1]=&buf[p+1];
+		}
+		if(buf[p] == '@')
+		{
+			buf[p]='\0';
 			argv[2]=&buf[p+1];
 		}
 	}
@@ -483,28 +510,31 @@ int handlepclient (struct cliententry *list_ptr, int fromwho, int pargc, char **
 			return KILLCURRENTUSER;
 		}		
 		if( (list_ptr->flags & FLAGSUPER) == 0)
-		{      
-			motdf = fopen (jack->motdf, "r");
-			if(motdf != NULL)
+		{
+			if(jack->motdfile)
 			{
-				while (!feof (motdf))
+				motdf = fopen (jack->motdfile, "r");
+				if(motdf != NULL)
 				{
-					memset(motdb,0,MAXMOTDLINE);
-					fgets (motdb,MAXMOTDLINE, motdf);
-					motdb[MAXMOTDLINE]='\0';
-					p=remnl (motdb,MAXMOTDLINE);
-					motdb[MAXMOTDLINE]='\0';
-				
-					if(p > 0)
+					while (!feof (motdf))
 					{
-						r=sockprint(list_ptr->fd, "NOTICE AUTH :-*- %s\n", motdb);
-						if(r < 0)
+						memset(motdb,0,MAXMOTDLINE);
+						fgets (motdb,MAXMOTDLINE, motdf);
+						motdb[MAXMOTDLINE]='\0';
+						p=remnl (motdb,MAXMOTDLINE);
+						motdb[MAXMOTDLINE]='\0';
+				
+						if(p > 0)
 						{
-							return KILLCURRENTUSER;
+							r=sockprint(list_ptr->fd, "NOTICE AUTH :-*- %s\n", motdb);
+							if(r < 0)
+							{
+								return KILLCURRENTUSER;
+							}
 						}
 					}
+					fclose (motdf);
 				}
-				fclose (motdf);
 			}
 		}
 		r=sockprint(list_ptr->fd, "NOTICE AUTH :Level two, lets connect to something real now\n");
@@ -646,10 +676,10 @@ BUILTIN_COMMAND(srv_nick)
 	int p,repc,c,f;
 	char repv[3];
 	char *nuh[3];
-	char *arf="UNKNOWN";
-	nuh[0]=arf;
-	nuh[1]=arf;
-	nuh[2]=arf;
+
+	nuh[0]=arfunk;
+	nuh[1]=arfunk;
+	nuh[2]=arfunk;
 	
 	if(pargc < 2)
 	{
@@ -701,6 +731,60 @@ BUILTIN_COMMAND(srv_tellnick)
 	}
 	return FORWARDCMD;
 }
+
+BUILTIN_COMMAND(srv_privmsg)
+{
+	unsigned char *ctcargv[2];
+	char *nuh[]={arfunk,arfunk,arfunk};
+	char *s;
+	char *i;
+	int p;
+
+	if(pargc < 3)
+	{
+		return FORWARDCMD;
+	}
+	if(pargv[2][0] == 1)
+	{ /* CTCP */
+		for(s=pargv[2]+1;*s;s++);
+		s--;
+		if(*s == 1)
+		{
+			s--;
+		}
+		p=s-pargv[2];
+		ctcargv[0]=pmalloc(p);
+		
+		i=ctcargv[0];
+		s=pargv[2]+1;
+		
+		for(; p; p--, i++, s++)
+		{
+			*i=*s;
+		}
+		*i='\0';
+		p=1;
+		for(i=ctcargv[0];*i;i++)
+		{
+			if(*i == ' ')
+			{
+				*i = '\0';
+				i++;
+				ctcargv[p]=i;
+				p++;
+				break;
+			}
+		}
+		s=psdup(prefix);
+		splitnickuserhost(nuh, s);
+		p = handlectcp(list_ptr, nuh[0], prefix, p, ctcargv);
+		free(ctcargv[0]);
+		free(s);
+		return p;
+	}
+	return FORWARDCMD;
+}
+
 
 BUILTIN_COMMAND(cmd_resumealive)
 {

@@ -11,7 +11,7 @@
 #define DOCKEDFD -10
 
 #define BUFSIZE 512
-#define PASSLEN 16
+#define PASSLEN 32
 #define HOSTLEN 63
 #define NICKLEN 30
 #define USERLEN 10
@@ -29,6 +29,8 @@
 #define FLAGCONNECTED 64
 #define FLAGKEEPALIVE 128
 #define FLAGDOCKED 256
+#define FLAGREVERSE 512
+#define FLAGCONNECTING 1024
 
 #define CLIENT 0
 #define SERVER 1
@@ -67,17 +69,28 @@ struct cliententry
   PAGE page_client;
   PAGE page_server;
   struct chanentry *headchan;
+  char *version;
+  int dnsid;
 };
 
 #define BUILTIN_COMMAND(x) int x(struct cliententry *list_ptr, char *prefix, int pargc, char **pargv)
+#define BUILTIN_CTCPCMD(x) int x(struct cliententry *list_ptr, unsigned char *fromwho, unsigned char *prefix, int pargc, unsigned char **pargv)
+typedef struct
+{
+	char *name;
+	int (*func)(struct cliententry *, char *, int, char **);
+	unsigned int flags_on;
+	unsigned int flags_off;
+} cmdstruct;
 
 typedef struct
 {
-   char *name;
-   int (*func)(struct cliententry *, char *, int, char **);
-   unsigned int flags_on;
-   unsigned int flags_off;
-} cmdstruct;
+	unsigned char *name;
+	BUILTIN_CTCPCMD((*func));
+	unsigned int flags_on;
+	unsigned int flags_off;	
+} ctcpfuncs;
+
 
 
 struct vhostentry
@@ -104,7 +117,6 @@ typedef struct
 	int identwd;
 	int logf;
 	int has_alist;
-	int usemotd;
 	int mtype;
 	
 	FILE *logfile;
@@ -115,8 +127,8 @@ typedef struct
 	char vhostdefault[HOSTLEN+1];
 	char spass[PASSLEN+1];
 	char dpass[PASSLEN+1];
-	char pidfile[FILELEN];
-	char motdf[FILELEN+1];
+	char *motdfile;
+	char *pidfile;
 } confetti;
 
 #define CONFNOTFOUND 1
