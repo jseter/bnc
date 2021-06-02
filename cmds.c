@@ -557,7 +557,7 @@ void process_join(struct cliententry *cptr, char *userhost, char *channame)
 			return;
 		}
 
-		printf("NICK %s\n", nick);		
+//		printf("NICK %s\n", nick);		
 		free(nick);
 		return;
 	}

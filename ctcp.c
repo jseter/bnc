@@ -204,7 +204,7 @@ int ct_handle(struct cliententry *cptr, char *prefix, char *to, char *msg, int f
 	
 	
 	
-	return 0;
+	return FORWARDCMD;
 }
 
 
