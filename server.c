@@ -286,7 +286,7 @@ int passwordokay (char *s, char *pass)
 	else
 		encr = s;
 
-	if(!strcmp(encr, pass) == 0)
+	if(strcmp(encr, pass) == 0)
 		return 1;
 
 	return 0;
@@ -1429,6 +1429,15 @@ int initproxy (confetti * jr)
 
 	if(*jr->dhost)
 	{
+		memset(&sin4, 0, sizeof(sin4));
+		sin4.sin_family = AF_INET;
+		sin4.sin_port = htons(jr->dport);
+
+		memset(&sin6, 0, sizeof(sin6));
+		sin6.sin6_family = AF_INET6;
+		sin6.sin6_port = htons(jr->dport);
+
+
 		res = inet_pton(AF_INET, jr->dhost, &sin4.sin_addr);
 		if(res == 0)
 		{
@@ -1447,19 +1456,6 @@ int initproxy (confetti * jr)
 			}
 		}
 	}	
-
-	if(family == AF_INET)
-	{
-		memset(&sin4, 0, sizeof(sin4));
-		sin4.sin_family = AF_INET;
-		sin4.sin_port = htons(jr->dport);
-	}
-	else /* if(family == AF_INET6) */
-	{
-		memset(&sin6, 0, sizeof(sin6));
-		sin6.sin6_family = AF_INET6;
-		sin6.sin6_port = htons(jr->dport);
-	}
 
 	s_sock = socket (family, SOCK_STREAM, 0);
 	if (s_sock < 0)
