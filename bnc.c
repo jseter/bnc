@@ -101,9 +101,9 @@ server(int s)
 	                }
 	        }
         }
-        sprintf(buffer, "NOTICE %s :*** Welcome to IRC Jumperbot- Your in the temperal limbo that requires you connect to a real server\n",nck);
+        sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :Level two, lets connect to something real now\n",nck);
 	write(s, buffer, strlen(buffer));
-        sprintf(buffer, "NOTICE %s :type /quote conn [server] <port> to connect\n",nck);
+        sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :type /quote conn [server] <port> to connect\n",nck);
 	write(s, buffer, strlen(buffer));
 	while(1)
 	{
@@ -149,6 +149,8 @@ server(int s)
 				}
 				else
 				  myport = atoi(port);
+				sprintf(buffer, ":Bnc!system@bnc.com NOTICE %s :Making reality through %s port %i\n",nck,myserver,myport);
+				write(s, buffer, strlen(buffer));
 				sock_c = do_connect(myserver, myport);
 				if(sock_c < 0)
 					sock_c = -1;
@@ -246,7 +248,7 @@ main(int argc, char *argv[])
         cu=0;
         po=0;
 	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.0.9 GNU project (C) 1997-98\n");
+	printf("\nIrc Proxy v2.0.14 GNU project (C) 1997-98\n");
 	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
 	
 	if(loadconf()) {

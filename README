@@ -7,7 +7,7 @@
 	I would tell you how to un-tar/gz this file, but your
   reading this so why would you need help :-)
 	To compile bnc simply type:
-  gcc -o bnc bnc.c
+  make
 
 3.CONFIGURATION
 	The configuration file give BNC the nessesary info to
@@ -16,7 +16,7 @@
 
 4.RUNNING
   type:
-  advbnc
+  bnc
 
 	As you can guess i succeeded in making it do the nohup bnc&
   by itself.
