@@ -16,6 +16,15 @@ extern h_errno;
 int pt,mu,dp,cu,po;
 char ps[20];
 
+void
+child_killer(int s)
+{
+        wait(NULL);
+        signal(SIGCHLD, child_killer);
+}
+
+
+
 int
 do_connect(char *hostname, u_short port)
 {
@@ -255,7 +264,7 @@ main(int argc, char *argv[])
         cu=0;
         po=0;
 	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.0.15 GNU project (C) 1997-98\n");
+	printf("\nIrc Proxy v2.0.16 GNU project (C) 1997-98\n");
 	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
 	
 	if(loadconf()) {
@@ -298,26 +307,29 @@ main(int argc, char *argv[])
                 exit(0);
       
         }
-        signal(SIGCHLD, fireman);
-	while(1)
-	{
-		sinlen = sizeof(sin);
-		close(a_sock);
-		a_sock = accept(s_sock, (struct sockaddr *)&sin, &sinlen);
-		if(a_sock < 0)
-		{
-			perror("accept");
-			continue;
-		}
-		switch(fork())
-		{
-			case -1:
-				continue;
-			case 0:
-				server(a_sock);
-				exit(0);
-		}
-		/* while(waitpid(-1, NULL, WNOHANG) > 0); */
-	}
+	signal(SIGCHLD, child_killer);
+        while(1)
+        {
+                sinlen = sizeof(sin);
+                close(a_sock);
+                a_sock = accept(s_sock, (struct sockaddr *)&sin, &sinlen);
+                if(a_sock < 0 && errno == EINTR)
+                        continue;
+                if(a_sock < 0)
+                {
+                        perror("accept");
+                        continue;
+                }
+                switch(fork())
+                {
+                        case -1:
+                                continue;
+                        case 0:
+                                server(a_sock);
+                                exit(0);
+                }
+        }
+
+
 }
 
