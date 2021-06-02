@@ -1,3 +1,9 @@
+2.8.9
+(1) Fixed backspace security flaw (reported by Yak)
+(2) Fixed compile errors related to compound statements
+(3) Rewrote logic of /vip command
+(4) Rewrote docked session listing code
+
 2.8.8
 (1) Added support for setting a specific IP to listen on 
     (listen <[host:]port> [maxusers])

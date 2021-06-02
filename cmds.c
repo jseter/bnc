@@ -2,11 +2,13 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <errno.h>
                      
 #include "config.h"
 #include "sbuf.h"
@@ -340,6 +342,26 @@ int ismenuh(char *prefix, char *nick)
 	return m;
 }
 
+void list_docks(struct cliententry *cptr)
+{
+	struct cliententry *dptr;
+	for(dptr = headclient; dptr; dptr=dptr->next)
+	{
+		if(dptr->flags & FLAGDOCKED)
+			break;
+	}
+
+	if(dptr == NULL)
+		return;
+		
+	tprintf(&cptr->loc, "NOTICE AUTH :You have docked sessions to resume type /quote resume <dockfd> <password>\n");
+	do
+	{
+		tprintf(&cptr->loc, "NOTICE AUTH :Docked session %i\n", dptr->srv.fd);
+		while( (dptr=dptr->next) && !(dptr->flags & FLAGDOCKED) );
+	} while(dptr);
+	tprintf(&cptr->loc, "NOTICE AUTH :End of dock list\n");
+}
 
 int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **pargv, char *prefix)
 {
@@ -436,30 +458,9 @@ int handlepclient (struct cliententry *cptr, int fromwho, int pargc, char **parg
 		tprintf(&cptr->loc, "NOTICE AUTH :Level two, lets connect to something real now\n");
 		tprintf(&cptr->loc, "NOTICE AUTH :type /quote conn [server] <port> <pass> to connect\n");
 
-		/* dock scan */
-		{
-			struct cliententry *dptr;
-			for(dptr = headclient; dptr; dptr=dptr->next)
-			{
-				if(dptr->flags & FLAGDOCKED)
-				{
-					tprintf(&cptr->loc, "NOTICE AUTH :You have docked sessions to resume type /quote resume <dockfd> <password>\n");					
-					goto dock;
-				}
-			}
-			goto nodock;
-			for(; dptr; dptr=dptr->next)
-			{
-				if(dptr->flags & FLAGDOCKED)
-				{
-dock:
-					tprintf(&cptr->loc, "NOTICE AUTH :Docked session %i\n", dptr->srv.fd);
-				}
-			}
-			tprintf(&cptr->loc, "NOTICE AUTH :End of dock list\n");
-nodock:
-		}
-		tprintf(&cptr->loc, "NOTICE AUTH :type /quote help for basic list of commands and usage\n");			        
+		list_docks(cptr);
+
+		tprintf(&cptr->loc, "NOTICE AUTH :type /quote help for basic list of commands and usage\n");
 	}
 	return w;
 }
@@ -1077,88 +1078,30 @@ int cmd_vdf(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 	cptr->vhost[HOSTLEN]='\0';
 	return 0;
 }
+
+
+char *vhostbyid(unsigned long id)
+{
+	unsigned long idx;
+	struct vhostentry *vhost_ptr;	
+	for(idx = 1, vhost_ptr=jack->vhostlist; vhost_ptr; vhost_ptr = vhost_ptr->next, ++idx)
+	{
+		if(idx == id)
+			return vhost_ptr->vhost;
+	}
+	return NULL;
+}
+
 int cmd_vip(struct cliententry *cptr, char *prefix, int pargc, char **pargv)
 {
 	int f;
-	int highvh;
 	struct vhostentry *vhost_ptr;
 	char *vhost;
-#if 0
-	int res;
-	struct hostent *he;
-	struct in_addr addr;
-#endif
+	unsigned long vhostid;
+	char *pos;
 
-	
-	f = 0;
-	if (pargc > 1)
+	if(pargc < 2)
 	{
-		vhost = pargv[1];
-		
-		/* check for a fast entry */
-		{
-			char *s;
-			char ch;
-			for(f=0,s = pargv[1]; *s; s++)
-			{
-				ch = *s;
-				if(ch < '0' && ch > '9')
-					goto vfast_fail;
-				f *= 10;
-				f += ch - '0';
-			}
-			if((s - pargv[1]) == 0)
-				goto vfast_fail;
-
-			if(f == 0)
-			{
-				if (strlen (jack->vhostdefault) < 1)
-					tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default\n");
-				else
-					tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default (%s)\n", jack->vhostdefault);
-				strncpy (cptr->vhost, jack->vhostdefault, HOSTLEN);
-				cptr->vhost[HOSTLEN]='\0';
-				return 0;
-			}
-				
-			for(highvh = 1, vhost_ptr=jack->vhostlist; vhost_ptr; vhost_ptr = vhost_ptr->next, highvh++)
-			{
-				if(highvh == f)
-				{
-					vhost = vhost_ptr->vhost;
-					break;
-				}
-			}
-vfast_fail:				
-		}
-#if 0
-		res = inet_aton(vhost, &addr);
-		if(res == 1)
-		{
-			strncpy(cptr->vhost, inet_ntoa(addr), HOSTLEN);
-			cptr->vhost[HOSTLEN] = '\0';
-			tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost to %s\n", inet_ntoa (addr));
-		}
-		else
-		{
-			he = gethostbyname (vhost);
-			if (he)
-			{
-				memcpy (&addr.s_addr, he->h_addr, sizeof (addr.s_addr));
-				strncpy (cptr->vhost, vhost, HOSTLEN);
-				cptr->vhost[HOSTLEN]='\0';
-				tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost to %s [%s]\n", cptr->vhost, inet_ntoa (addr));
-			}
-			else
-				tprintf(&cptr->loc, "NOTICE AUTH :Vhost %s invalid\n", vhost);
-		}
-#else
-		tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost to %s\n", cptr->vhost);
-#endif
-	}
-	else
-	{	
-
 		if (strlen (cptr->vhost) != 0)
 			tprintf(&cptr->loc, "NOTICE AUTH :Current Vhost: %s\n", cptr->vhost);
 		else
@@ -1174,7 +1117,43 @@ vfast_fail:
 		for(f = 1, vhost_ptr=jack->vhostlist; vhost_ptr; vhost_ptr = vhost_ptr->next, f++)
 			tprintf(&cptr->loc, "NOTICE AUTH : (%i) %s\n", f, vhost_ptr->vhost);
 		tprintf(&cptr->loc, "NOTICE AUTH :End of Vhost list\n");
+
+		return 0;
 	}
+
+
+	vhost = pargv[1];
+	vhostid = strtoul(vhost, &pos, 10);
+	if(pos <= vhost || *pos || (vhostid == ULONG_MAX && errno == ERANGE))
+	{
+		strncpy (cptr->vhost, vhost, HOSTLEN);
+		cptr->vhost[HOSTLEN]='\0';
+		tprintf(&cptr->loc, "NOTICE AUTH :Set vhost to %s\n", cptr->vhost);
+		return 0;
+	}
+
+	if(vhostid == 0)
+	{
+		if (strlen (jack->vhostdefault) < 1)
+			tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default\n");
+		else
+			tprintf(&cptr->loc, "NOTICE AUTH :Switching Vhost back to default (%s)\n", jack->vhostdefault);
+		strncpy (cptr->vhost, jack->vhostdefault, HOSTLEN);
+		cptr->vhost[HOSTLEN]='\0';
+		return 0;
+	}
+
+	vhost = vhostbyid(vhostid);
+	if(vhost == NULL)
+	{
+		tprintf(&cptr->loc, "NOTICE AUTH :No matching vhost for specified ID\n");
+		return 0;
+	}
+
+
+	strncpy (cptr->vhost, vhost, HOSTLEN);
+	cptr->vhost[HOSTLEN]='\0';
+	tprintf(&cptr->loc, "NOTICE AUTH :Set vhost to %s\n", cptr->vhost);
 	return 0;
 }
 int cmd_who(struct cliententry *cptr, char *prefix, int pargc, char **pargv)

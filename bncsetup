@@ -4,7 +4,7 @@ MYPID=$$
 TMPFILE=.bnc$MYPID.tmp
 RSLFILE=.bnc$MYPID.rsl
 VHTFILE=.bnc$MYPID.vht
-BSVERSION="0.4 for BNC2.8.8"
+BSVERSION="0.5 for BNC2.8.9"
 SAVEFILE=./bnc.conf
 
 bsclean()
@@ -122,8 +122,8 @@ fi
 cat << EOF > $TMPFILE
 BNCSETUP v$BSVERSION
 
-Written by IceWizard <ice@walt-disney.com>
-Rewritten Pharos <Pharos@refract.com>
+Written by IceWizard
+Rewritten by Pharos
 BNCSetup is a quick BNC conf generator
 
 EOF

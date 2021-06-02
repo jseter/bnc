@@ -214,15 +214,6 @@ int sbuf_getmsg(struct sbuf *record, char *buf, size_t length)
 				nlcount++;
 				continue;
 			}
-			if(*s == '\b')
-			{
-				if(!nlcount && tlength > 0)
-				{
-					tlength--;
-					d--;
-				}
-				continue;
-			}
 			if(*s == '\0')
 			{
 				/* no nul byte allowed in input */

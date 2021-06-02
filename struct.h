@@ -1,4 +1,4 @@
-#define VERSION "v2.8.8"
+#define VERSION "v2.8.9"
 #define PACKETBUFF 1024
 
 #define HIGHOVL 16384
