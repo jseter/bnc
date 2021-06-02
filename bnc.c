@@ -183,6 +183,13 @@ server(int s)
 	}
 }
 
+void fireman()
+{
+	printf("Fire!!!!!");
+	while(waitpid(-1, NULL, WNOHANG) > 0);
+}
+                  
+
 
 loadconf(){
   FILE *conf;
@@ -248,7 +255,7 @@ main(int argc, char *argv[])
         cu=0;
         po=0;
 	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.0.14 GNU project (C) 1997-98\n");
+	printf("\nIrc Proxy v2.0.15 GNU project (C) 1997-98\n");
 	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
 	
 	if(loadconf()) {
@@ -291,7 +298,7 @@ main(int argc, char *argv[])
                 exit(0);
       
         }
-
+        signal(SIGCHLD, fireman);
 	while(1)
 	{
 		sinlen = sizeof(sin);
@@ -310,7 +317,7 @@ main(int argc, char *argv[])
 				server(a_sock);
 				exit(0);
 		}
-		while(waitpid(-1, NULL, WNOHANG) > 0) ;
+		/* while(waitpid(-1, NULL, WNOHANG) > 0); */
 	}
 }
 
