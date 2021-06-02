@@ -26,7 +26,7 @@ do_connect(char *hostname, u_short port)
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
 	sin.sin_addr.s_addr = inet_addr(hostname);
-	if(sin.sin_addr.s_addr == INADDR_NONE)
+	if(sin.sin_addr.s_addr == -1)
 	{
 		he = gethostbyname(hostname);
 		if(!he)
@@ -52,23 +52,28 @@ server(int s)
 	char buffer[1024];
 	char user[1024];
 	char nick[100];
+	char tm[2];
 	int u,n,p;
 	fd_set rset;
 	u_short myport;
 	char *cmd, *server, *port,*nck,*pass;
 	char myserver[1024];
+	strcpy(tm," ");
 	u=1;
 	n=1;
+	p=0;
 	if(po)
 	  p=1;
-	cu++;
 	while((u+n+p)&&3){
-		memset(buffer, 0, 1023);
-		if(read(s, buffer, 1024) <= 0)
-		{
-			close(s);
-			cu--;
-			return;
+
+		memset(buffer,0,1023);
+		while(tm[0]!='\n'||strlen(buffer)<=0){
+			memset(tm,0,2);
+			if(read(s,tm,1) <= 0){
+				close(s);
+				return;
+			}
+			strncat(buffer,tm,1);		
 		}
 		if(!strncasecmp(buffer, "USER ", 5)){
 			strcpy(user, buffer);
@@ -167,7 +172,6 @@ server(int s)
 				{
 					close(s);
 					close(sock_c);
-					cu--;
 					return;
 				}
 				write(s, buffer, strlen(buffer));
@@ -203,7 +207,6 @@ loadconf(){
  		confval=strtok(NULL,"\n");
  		if(!confval)
  		  continue;
-//  		printf("var %s = %s\n",confcmd,confval);
  		if(!strcasecmp(confcmd,"pt"))
  			pt=atoi(confval);
  		else
@@ -242,8 +245,8 @@ main(int argc, char *argv[])
         cu=0;
         po=0;
 	strcpy(ps,"-NONE-");
-	printf("\nIrc Proxy v2.0.1 GNU project (C) 1997-98\n");
-	printf("Coded by James Seter\n");
+	printf("\nIrc Proxy v2.0.9 GNU project (C) 1997-98\n");
+	printf("Coded by James Seter bugs-> (noonie@toledolink.com)\n");
 	
 	if(loadconf()) {
 		printf("***Using defaults(Not recommended)\n");
@@ -286,14 +289,10 @@ main(int argc, char *argv[])
 			case -1:
 				continue;
 			case 0:
-				printf("TEST %i/%i\n",cu,mu);
-				if(cu>=mu)
-				  exit(0);
-				cu++;
 				server(a_sock);
 				exit(0);
 		}
 		while(waitpid(-1, NULL, (int) NULL) > 0) ;
 	}
-	}
+}
 
